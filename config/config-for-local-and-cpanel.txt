@@ -1,0 +1,34 @@
+For Cpanel:
+<?php
+$host = 'localhost';
+$dbname = 'u403269249_muhaddisapanel';
+$db_user = 'u403269249_muhaddisa_b_h';
+$db_pass = 'Muhaddisa_db_pass0';
+
+try {
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname", $db_user, $db_pass);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+} catch (PDOException $e) {
+    die("❌ Database connection failed: " . $e->getMessage());
+}
+?>
+
+
+
+
+For Local:
+<?php
+$host = 'localhost';
+$dbname = 'muhaddisa_panel1';
+$db_user = 'root';
+$db_pass = '';
+
+try {
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname", $db_user, $db_pass);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+} catch (PDOException $e) {
+    die("❌ Database connection failed: " . $e->getMessage());
+}
+?>

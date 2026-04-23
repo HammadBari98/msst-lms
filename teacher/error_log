@@ -1,0 +1,11 @@
+[31-May-2025 11:40:41 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/employee/header.php on line 7
+[31-May-2025 11:43:35 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/employee/header.php on line 7
+[31-May-2025 11:43:36 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/employee/header.php on line 7
+[31-May-2025 11:43:40 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/employee/header.php on line 7
+[31-May-2025 11:44:19 UTC] PHP Warning:  Undefined variable $is_admin in /home/alabtmwm/msstskardu.com/lms/employee/sidebar.php on line 43
+[31-May-2025 11:44:19 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/employee/header.php on line 7
+[31-May-2025 11:44:22 UTC] PHP Warning:  Undefined variable $is_admin in /home/alabtmwm/msstskardu.com/lms/employee/sidebar.php on line 43
+[31-May-2025 11:44:22 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/employee/header.php on line 7
+[31-May-2025 11:44:23 UTC] PHP Warning:  Undefined variable $is_admin in /home/alabtmwm/msstskardu.com/lms/employee/sidebar.php on line 43
+[31-May-2025 11:44:23 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/employee/header.php on line 7
+[31-May-2025 11:44:33 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/employee/header.php on line 7

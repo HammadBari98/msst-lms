@@ -1,0 +1,248 @@
+[24-May-2025 09:39:22 UTC] PHP Warning:  require_once(/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php): Failed to open stream: No such file or directory in /home/alabtmwm/msstskardu.com/lms/student/login.php on line 3
+[24-May-2025 09:39:22 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php' (include_path='.:/opt/alt/php80/usr/share/pear:/opt/alt/php80/usr/share/php:/usr/share/pear:/usr/share/php') in /home/alabtmwm/msstskardu.com/lms/student/login.php:3
+Stack trace:
+#0 {main}
+  thrown in /home/alabtmwm/msstskardu.com/lms/student/login.php on line 3
+[24-May-2025 09:51:09 UTC] PHP Warning:  require_once(/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php): Failed to open stream: No such file or directory in /home/alabtmwm/msstskardu.com/lms/student/dashboard.php on line 9
+[24-May-2025 09:51:09 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php' (include_path='.:/opt/alt/php80/usr/share/pear:/opt/alt/php80/usr/share/php:/usr/share/pear:/usr/share/php') in /home/alabtmwm/msstskardu.com/lms/student/dashboard.php:9
+Stack trace:
+#0 {main}
+  thrown in /home/alabtmwm/msstskardu.com/lms/student/dashboard.php on line 9
+[24-May-2025 11:45:41 UTC] PHP Warning:  Undefined array key "student_email" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 10
+[24-May-2025 11:45:41 UTC] PHP Warning:  Undefined array key "student_department" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 11
+[24-May-2025 11:45:41 UTC] PHP Warning:  Undefined array key "student_joining_year" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 12
+[24-May-2025 11:46:14 UTC] PHP Warning:  Undefined array key "student_email" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 10
+[24-May-2025 11:46:14 UTC] PHP Warning:  Undefined array key "student_department" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 11
+[24-May-2025 11:46:14 UTC] PHP Warning:  Undefined array key "student_joining_year" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 12
+[24-May-2025 11:47:43 UTC] PHP Warning:  Undefined array key "student_email" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 10
+[24-May-2025 11:47:43 UTC] PHP Warning:  Undefined array key "student_department" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 11
+[24-May-2025 11:47:43 UTC] PHP Warning:  Undefined array key "student_joining_year" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 12
+[24-May-2025 12:37:31 UTC] PHP Warning:  require(db_connection.php): Failed to open stream: No such file or directory in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 8
+[24-May-2025 12:37:31 UTC] PHP Fatal error:  Uncaught Error: Failed opening required 'db_connection.php' (include_path='.:/opt/alt/php80/usr/share/pear:/opt/alt/php80/usr/share/php:/usr/share/pear:/usr/share/php') in /home/alabtmwm/msstskardu.com/lms/student/profile.php:8
+Stack trace:
+#0 {main}
+  thrown in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 8
+[24-May-2025 12:37:33 UTC] PHP Warning:  require(db_connection.php): Failed to open stream: No such file or directory in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 8
+[24-May-2025 12:37:33 UTC] PHP Fatal error:  Uncaught Error: Failed opening required 'db_connection.php' (include_path='.:/opt/alt/php80/usr/share/pear:/opt/alt/php80/usr/share/php:/usr/share/pear:/usr/share/php') in /home/alabtmwm/msstskardu.com/lms/student/profile.php:8
+Stack trace:
+#0 {main}
+  thrown in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 8
+[24-May-2025 15:04:10 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:13:01 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:14:44 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:15:52 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:16:39 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:16:59 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:17:16 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:17:17 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:17:37 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:17:56 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:18:05 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:18:22 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:19:42 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:19:53 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 15:26:56 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 16:45:39 UTC] PHP Warning:  Undefined array key "department" in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 15
+[24-May-2025 16:45:41 UTC] PHP Warning:  Undefined array key "department" in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 15
+[24-May-2025 16:45:45 UTC] PHP Warning:  Undefined array key "department" in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 15
+[24-May-2025 16:45:49 UTC] PHP Warning:  Undefined array key "department" in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 15
+[24-May-2025 16:46:50 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 16:49:29 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[24-May-2025 16:49:29 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[24-May-2025 16:54:36 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 28
+[24-May-2025 17:01:55 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 17:02:01 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 17:02:35 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 17:02:37 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 28
+[24-May-2025 17:02:39 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 28
+[24-May-2025 17:02:40 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 28
+[24-May-2025 17:02:40 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 28
+[24-May-2025 17:02:57 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 17:02:59 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 17:03:39 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[24-May-2025 17:03:39 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[24-May-2025 17:03:42 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[24-May-2025 17:03:42 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[24-May-2025 17:07:54 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 17:07:56 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[24-May-2025 17:07:56 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[24-May-2025 17:08:19 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[24-May-2025 17:08:19 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[24-May-2025 17:08:23 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[24-May-2025 17:08:23 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[24-May-2025 17:08:34 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 18:35:18 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 18:35:46 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 18:35:51 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[24-May-2025 18:35:53 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[24-May-2025 18:35:53 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[24-May-2025 18:35:59 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[24-May-2025 18:35:59 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[26-May-2025 10:22:06 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[26-May-2025 10:22:09 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[26-May-2025 10:22:09 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[26-May-2025 10:28:34 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[26-May-2025 10:28:34 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[26-May-2025 10:28:38 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[26-May-2025 10:34:36 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[26-May-2025 10:36:20 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[26-May-2025 11:26:24 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 06:48:18 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 06:49:53 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 06:49:53 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 06:50:00 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 06:50:07 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 06:51:48 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 06:51:48 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 06:55:05 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 06:58:31 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 06:58:35 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 06:58:37 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 06:58:37 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 06:59:06 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 06:59:06 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 06:59:11 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 06:59:15 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 07:00:55 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 07:00:55 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 07:11:57 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 07:11:57 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 07:17:43 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 07:17:43 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 07:21:34 UTC] PHP Warning:  mysqli_connect(): (HY000/1045): Access denied for user 'root'@'localhost' (using password: NO) in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 8
+[28-May-2025 07:21:56 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 07:21:56 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 07:21:58 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 07:21:58 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 07:22:00 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 07:22:12 UTC] PHP Warning:  mysqli_connect(): (HY000/1045): Access denied for user 'root'@'localhost' (using password: NO) in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 8
+[28-May-2025 07:22:16 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 07:22:16 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 07:22:19 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 07:22:31 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 07:22:31 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 07:22:34 UTC] PHP Warning:  mysqli_connect(): (HY000/1045): Access denied for user 'root'@'localhost' (using password: NO) in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 8
+[28-May-2025 07:22:34 UTC] PHP Warning:  mysqli_connect(): (HY000/1045): Access denied for user 'root'@'localhost' (using password: NO) in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 8
+[28-May-2025 07:22:35 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 07:53:42 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 07:53:52 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 07:53:52 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 07:53:58 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 07:53:58 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 07:56:19 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 08:30:10 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 08:30:17 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 08:30:17 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 08:31:02 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 08:32:48 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 10:49:17 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 10:49:19 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 10:49:19 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 11:00:38 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 11:00:38 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 11:00:47 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 11:00:48 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 11:00:48 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 12:01:07 UTC] PHP Parse error:  syntax error, unexpected token "<", expecting "]" in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 10
+[28-May-2025 12:07:47 UTC] PHP Parse error:  syntax error, unexpected token "<", expecting "]" in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 10
+[28-May-2025 12:07:53 UTC] PHP Parse error:  syntax error, unexpected token "<", expecting "]" in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 10
+[28-May-2025 12:08:24 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 12:09:22 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 112
+[28-May-2025 12:09:22 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 12:18:28 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 112
+[28-May-2025 12:18:28 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 12:51:16 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[28-May-2025 12:51:16 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 12:53:43 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[28-May-2025 12:53:43 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 12:55:38 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[28-May-2025 12:55:38 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 12:55:40 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[28-May-2025 12:55:40 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 12:56:22 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[28-May-2025 12:56:22 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:07:37 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/fees.php on line 49
+[28-May-2025 13:10:37 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/fees.php on line 49
+[28-May-2025 13:14:18 UTC] PHP Fatal error:  Cannot re-assign auto-global variable GLOBALS in /home/alabtmwm/msstskardu.com/lms/student/fees.php on line 53
+[28-May-2025 13:14:21 UTC] PHP Fatal error:  Cannot re-assign auto-global variable GLOBALS in /home/alabtmwm/msstskardu.com/lms/student/fees.php on line 53
+[28-May-2025 13:14:39 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 13:14:39 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:14:42 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 112
+[28-May-2025 13:14:42 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:14:44 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[28-May-2025 13:14:44 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:14:50 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 112
+[28-May-2025 13:14:50 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:14:59 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[28-May-2025 13:14:59 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:15:01 UTC] PHP Fatal error:  Cannot re-assign auto-global variable GLOBALS in /home/alabtmwm/msstskardu.com/lms/student/fees.php on line 53
+[28-May-2025 13:22:05 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:22:46 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[28-May-2025 13:22:46 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:22:51 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 112
+[28-May-2025 13:22:51 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:22:59 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[28-May-2025 13:22:59 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:23:04 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:24:11 UTC] PHP Warning:  Undefined array key "last_login" in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 28
+[28-May-2025 13:26:18 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:26:21 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:33:13 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:33:13 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:38:16 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:38:16 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:42:49 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:42:54 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 13:51:45 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 14:19:17 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 14:22:32 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 14:35:15 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 14:35:46 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[28-May-2025 14:35:58 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 09:38:36 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:00:47 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:01:08 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:32:52 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:33:02 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:33:06 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:33:08 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[03-Jun-2025 10:33:08 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:33:12 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[03-Jun-2025 10:33:12 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:33:18 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:33:29 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:34:32 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:34:33 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 10:41:37 UTC] PHP Warning:  require_once(/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php): Failed to open stream: No such file or directory in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 3
+[03-Jun-2025 10:41:37 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php' (include_path='.:/opt/alt/php80/usr/share/pear:/opt/alt/php80/usr/share/php:/usr/share/pear:/usr/share/php') in /home/alabtmwm/msstskardu.com/lms/student/profile.php:3
+Stack trace:
+#0 {main}
+  thrown in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 3
+[03-Jun-2025 10:41:39 UTC] PHP Warning:  require_once(/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php): Failed to open stream: No such file or directory in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 3
+[03-Jun-2025 10:41:39 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php' (include_path='.:/opt/alt/php80/usr/share/pear:/opt/alt/php80/usr/share/php:/usr/share/pear:/usr/share/php') in /home/alabtmwm/msstskardu.com/lms/student/profile.php:3
+Stack trace:
+#0 {main}
+  thrown in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 3
+[03-Jun-2025 10:45:39 UTC] PHP Warning:  require_once(/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php): Failed to open stream: No such file or directory in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 3
+[03-Jun-2025 10:45:39 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/alabtmwm/msstskardu.com/lms/student/../../config/db_config.php' (include_path='.:/opt/alt/php80/usr/share/pear:/opt/alt/php80/usr/share/php:/usr/share/pear:/usr/share/php') in /home/alabtmwm/msstskardu.com/lms/student/profile.php:3
+Stack trace:
+#0 {main}
+  thrown in /home/alabtmwm/msstskardu.com/lms/student/profile.php on line 3
+[03-Jun-2025 10:46:28 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 11:08:18 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 11:10:33 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 11:12:17 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/courses.php on line 106
+[03-Jun-2025 11:12:17 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 11:12:19 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/grades.php on line 112
+[03-Jun-2025 11:12:19 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 11:12:22 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/attendance.php on line 82
+[03-Jun-2025 11:12:22 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 11:18:10 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 11:54:11 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 12:20:49 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 12:20:52 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 12:30:01 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 12:30:59 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
+[03-Jun-2025 12:33:20 UTC] PHP Warning:  Undefined variable $is_admin_page_specific in /home/alabtmwm/msstskardu.com/lms/student/template.php on line 67
+[03-Jun-2025 12:37:39 UTC] PHP Warning:  Undefined variable $is_admin_page_specific in /home/alabtmwm/msstskardu.com/lms/student/template.php on line 67
+[03-Jun-2025 12:38:02 UTC] PHP Warning:  Undefined variable $student_name in /home/alabtmwm/msstskardu.com/lms/student/header.php on line 7
