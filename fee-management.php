@@ -17,6 +17,8 @@ if (!isset($_SESSION['admin_logged_in'])) {
 }
 
 
+
+
 $admin_name = $_SESSION['admin_name'] ?? 'Admin';
 
 // Enable error reporting for debugging
