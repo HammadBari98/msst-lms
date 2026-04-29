@@ -19,7 +19,7 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
     <link rel="stylesheet" href="style.css">
     
     <style>
-        /* --- PREMIUM ID CARD STYLES (CR80: 54mm x 86mm) --- */
+        /* --- PREMIUM ID CARD STYLES (CR80: 54mm x 86mm STRICT) --- */
         :root {
             --brand-primary: #906833;
             --brand-accent: #cc8636;
@@ -63,7 +63,7 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
             width: 45mm;
             height: 45mm;
             transform: translate(-50%, -50%);
-            background-image: url('http://localhost/msst/lms/assets/images/msst-logo.png');
+            background-image: url('/assets/images/msst-logo.png');
             background-size: contain;
             background-repeat: no-repeat;
             background-position: center;
@@ -337,33 +337,43 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
         <div class="container-fluid no-print">
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
                 <h1 class="h3 mb-0 text-gray-800">ID Card Generator</h1>
-                <div>
-                    <!-- New Edit Button added here -->
-                    <button class="btn btn-secondary shadow-sm fw-bold px-4 me-2" data-bs-toggle="modal" data-bs-target="#editCardModal">
-                        <i class="fas fa-edit me-2"></i> Edit Card Details
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-secondary shadow-sm fw-bold px-3" data-bs-toggle="modal" data-bs-target="#editCardModal">
+                        <i class="fas fa-edit me-2"></i> Edit Details
                     </button>
-                    <button class="btn btn-primary shadow-sm fw-bold px-4" onclick="window.print()">
-                        <i class="fas fa-print me-2"></i> Print PVC Card
+
+                    <!-- SEPARATED DOWNLOAD DROPDOWN MENU -->
+                    <div class="dropdown d-inline-block">
+                        <button class="btn btn-success shadow-sm fw-bold px-3 dropdown-toggle" type="button" id="downloadBtnMenu" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-download me-2"></i> Download Image
+                        </button>
+                        <ul class="dropdown-menu shadow" aria-labelledby="downloadBtnMenu">
+                            <li><a class="dropdown-item fw-bold text-success" href="#" onclick="downloadCard('front', event)"><i class="fas fa-id-card me-2"></i>Download Front Only</a></li>
+                            <li><a class="dropdown-item fw-bold text-primary" href="#" onclick="downloadCard('back', event)"><i class="fas fa-barcode me-2"></i>Download Back Only</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item fw-bold text-dark" href="#" onclick="downloadCard('both', event)"><i class="fas fa-object-group me-2"></i>Download Both (Side-by-Side)</a></li>
+                        </ul>
+                    </div>
+
+                    <button class="btn btn-primary shadow-sm fw-bold px-3" onclick="window.print()">
+                        <i class="fas fa-print me-2"></i> Print PVC
                     </button>
                 </div>
             </div>
-
-            <!-- <div class="alert shadow-sm border-0" style="background-color: #e3f2fd; color: #084298;">
-                <i class="fas fa-magic me-2"></i> <strong>Interactive Mode Enabled.</strong> Click "Edit Card Details" to change the student information and upload a photo. The card and QR code will update instantly.
-            </div> -->
         </div>
 
         <!-- Workspace Area -->
         <div class="workspace-area">
             
             <!-- PRINT LAYOUT CONTAINER -->
-            <div class="print-layout">
+            <div class="print-layout" id="cardCaptureArea">
                 
-                <!-- FRONT OF CARD -->
-                <div class="id-card card-front">
+                <!-- FRONT OF CARD (Added specific ID) -->
+                <div class="id-card card-front" id="cardFront">
                     <div class="header">
                         <div class="header-content">
-                            <img src="/assets/images/msst-logo.png" alt="Logo" class="logo">
+                            <!-- crossorigin="anonymous" required for image capture -->
+                            <img src="http://localhost/msst/lms/assets/images/msst-logo.png" alt="Logo" class="logo" crossorigin="anonymous">
                             <div class="school-name">Muhaddisa School of<br>Science & Technology</div>
                         </div>
                         <div class="motto">KNOWLEDGE • DISCIPLINE • EXCELLENCE</div>
@@ -372,7 +382,7 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
                     <div class="badge-title">STUDENT IDENTITY CARD</div>
                     
                     <div class="photo-wrap">
-                        <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200&h=250" id="cardPhoto" class="student-photo" alt="Student Photo">
+                        <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200&h=250" id="cardPhoto" class="student-photo" alt="Student Photo" crossorigin="anonymous">
                     </div>
                     
                     <div class="info-grid">
@@ -406,8 +416,8 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
                     </div>
                 </div>
 
-                <!-- BACK OF CARD -->
-                <div class="id-card card-back">
+                <!-- BACK OF CARD (Added specific ID) -->
+                <div class="id-card card-back" id="cardBack">
                     <div class="header">
                         <div class="campus-title">CAMPUS ADDRESS</div>
                         <div class="address">
@@ -447,7 +457,7 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
                     
                     <!-- Dynamic QR Code -->
                     <div style="position: absolute; bottom: 4mm; width: 100%; text-align: center;">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=MST-26-0128" id="cardQR" style="width: 14mm; height: 14mm;" alt="QR Code">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=MST-26-0128" id="cardQR" style="width: 14mm; height: 14mm;" alt="QR Code" crossorigin="anonymous">
                     </div>
                 </div>
 
@@ -522,6 +532,9 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
 
 <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Include html2canvas library for capturing the HTML as an image -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
 <script>
     // Sidebar toggle logic
     const sidebar = document.getElementById('sidebar');
@@ -536,8 +549,6 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
     }
 
     // --- INSTANT CARD UPDATE LOGIC ---
-    
-    // Handle Photo Upload Preview instantly
     document.getElementById('inputPhoto').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
@@ -549,7 +560,6 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
         }
     });
 
-    // Apply text changes from modal to the card
     function applyCardUpdates() {
         const name = document.getElementById('inputName').value;
         const fName = document.getElementById('inputFName').value;
@@ -559,7 +569,6 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
         const issue = document.getElementById('inputIssue').value;
         const expiry = document.getElementById('inputExpiry').value;
 
-        // Update DOM elements on the card
         document.getElementById('cardName').textContent = name;
         document.getElementById('cardFName').textContent = fName;
         document.getElementById('cardId').textContent = id;
@@ -568,12 +577,59 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
         document.getElementById('cardIssue').textContent = issue;
         document.getElementById('cardExpiry').textContent = expiry;
         
-        // Update validity bar (convert to uppercase)
         document.getElementById('cardValidity').textContent = expiry.toUpperCase();
 
-        // Dynamically update the QR Code API URL based on the new Student ID
         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(id)}`;
         document.getElementById('cardQR').src = qrUrl;
+    }
+
+    // --- ENHANCED TARGETED IMAGE DOWNLOAD LOGIC ---
+    function downloadCard(type, event) {
+        event.preventDefault(); // Prevent dropdown from jumping to top
+        const studentId = document.getElementById('cardId').textContent.trim();
+        const mainBtn = document.getElementById('downloadBtnMenu');
+        const originalText = mainBtn.innerHTML;
+        
+        let targetElement;
+        let fileNameSuffix;
+
+        // Determine what element to take a screenshot of
+        if (type === 'front') {
+            targetElement = document.getElementById('cardFront');
+            fileNameSuffix = 'Front';
+        } else if (type === 'back') {
+            targetElement = document.getElementById('cardBack');
+            fileNameSuffix = 'Back';
+        } else {
+            targetElement = document.getElementById('cardCaptureArea');
+            fileNameSuffix = 'Both';
+        }
+        
+        mainBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Generating...';
+        mainBtn.disabled = true;
+
+        // Generate the image
+        html2canvas(targetElement, {
+            scale: 1, // 4x scale for high resolution printing
+            useCORS: true, 
+            allowTaint: false,
+            // If downloading 'both', keep background transparent so they don't get stitched with white.
+            // If individual, ensure a clean white background.
+            backgroundColor: (type === 'both') ? null : '#ffffff' 
+        }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `MSST_ID_${studentId}_${fileNameSuffix}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            
+            mainBtn.innerHTML = originalText;
+            mainBtn.disabled = false;
+        }).catch(err => {
+            console.error("Error generating image: ", err);
+            alert("Failed to generate image. Please ensure your logo and photo are accessible via HTTPs.");
+            mainBtn.innerHTML = originalText;
+            mainBtn.disabled = false;
+        });
     }
 </script>
 </body>
