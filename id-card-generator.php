@@ -363,7 +363,7 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
                 <div class="id-card card-front">
                     <div class="header">
                         <div class="header-content">
-                            <img src="http://localhost/msst/lms/assets/images/msst-logo.png" alt="Logo" class="logo">
+                            <img src="/assets/images/msst-logo.png" alt="Logo" class="logo">
                             <div class="school-name">Muhaddisa School of<br>Science & Technology</div>
                         </div>
                         <div class="motto">KNOWLEDGE • DISCIPLINE • EXCELLENCE</div>

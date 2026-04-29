@@ -9,6 +9,7 @@
         <li><a href="dashboard.php" class="active"><i class="fas fa-tachometer-alt fa-fw me-2"></i> <span>Dashboard</span></a></li>
         <li><a href="manage-users.php"><i class="fas fa-users-cog fa-fw me-2"></i> <span>Manage Users</span></a></li>
         <li><a href="student-information.php"><i class="fas fa-user-graduate fa-fw me-2"></i> <span>Student Information</span></a></li>
+        <li><a href="id-card-generator.php"><i class="fas fa-id-card fa-fw me-2"></i> <span>ID Card Generator</span></a></li>
         <li><a href="teacher-management.php"><i class="fas fa-chalkboard-teacher fa-fw me-2"></i> <span>Teacher Management</span></a></li>
         <li><a href="fee-management.php"><i class="fas fa-file-invoice-dollar fa-fw me-2"></i> <span>Fee Management</span></a></li>
         <li><a href="class-management.php"><i class="fas fa-chalkboard"></i> <span>Classes & Sections</span></a></li>
