@@ -32,7 +32,6 @@ try {
     try {
         $pdo->query("SELECT card_photo FROM generated_id_cards LIMIT 1");
     } catch (PDOException $e) {
-        // If the query fails, the column doesn't exist. Let's add it!
         $pdo->exec("ALTER TABLE generated_id_cards ADD COLUMN card_photo LONGTEXT AFTER expiry_date");
     }
 
@@ -61,7 +60,7 @@ try {
             $session_yr = $_POST['card_session'];
             $issue = $_POST['issue_date'];
             $expiry = $_POST['expiry_date'];
-            $photo = $_POST['custom_photo'] ?? null; // Capture custom base64 photo if provided
+            $photo = $_POST['custom_photo'] ?? null; 
             
             $stmt = $pdo->prepare("INSERT INTO generated_id_cards 
                 (user_id, card_name, card_fname, card_class, card_session, issue_date, expiry_date, card_photo) 
@@ -100,7 +99,6 @@ try {
     $all_students = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
 
 } catch (PDOException $e) {
-    // If anything fails, capture the error to show in the UI, but don't crash the page
     $db_error = $e->getMessage();
 }
 
@@ -238,9 +236,7 @@ if (isset($_SESSION['action_msg'])) {
                                 </thead>
                                 <tbody>
                                     <?php foreach ($generated_cards as $card): 
-                                        // Use custom uploaded photo if it exists, otherwise fallback to DB profile picture
                                         $rawPic = !empty($card['card_photo']) ? $card['card_photo'] : (!empty($card['db_profile_picture']) ? $card['db_profile_picture'] : null);
-                                        
                                         $fallbackPic = 'https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=' . urlencode($card['card_name']);
                                         $picUrl = $rawPic ?: $fallbackPic;
                                         
@@ -300,7 +296,6 @@ if (isset($_SESSION['action_msg'])) {
                                 <input type="hidden" name="card_session" id="save_card_session">
                                 <input type="hidden" name="issue_date" id="save_issue_date">
                                 <input type="hidden" name="expiry_date" id="save_expiry_date">
-                                <!-- Hidden input for custom uploaded base64 photo -->
                                 <input type="hidden" name="custom_photo" id="save_custom_photo">
                                 <button type="submit" class="btn btn-success shadow-lg fw-bold px-4">
                                     <i class="fas fa-check-circle me-2"></i> Confirm & Save Card
@@ -316,7 +311,7 @@ if (isset($_SESSION['action_msg'])) {
 
                             <div class="dropdown d-inline-block">
                                 <button class="btn btn-success shadow-sm fw-bold px-3 dropdown-toggle" type="button" id="downloadBtnMenu" data-bs-toggle="dropdown">
-                                    <i class="fas fa-download me-2"></i> Download Image
+                                    <i class="fas fa-download me-2"></i> Download High-Res Image
                                 </button>
                                 <ul class="dropdown-menu shadow">
                                     <li><a class="dropdown-item fw-bold text-success" href="#" onclick="downloadCard('front', event)"><i class="fas fa-id-card me-2"></i>Download Front Only</a></li>
@@ -458,7 +453,6 @@ if (isset($_SESSION['action_msg'])) {
                     <input type="hidden" id="createOriginalPhoto">
                     <input type="hidden" id="createCustomPhoto">
 
-                    <!-- NEW: Image Upload on Creation -->
                     <div class="col-12 mb-3">
                         <label class="form-label fw-bold text-success"><i class="fas fa-camera me-1"></i> Custom Student Photo</label>
                         <input class="form-control border-success bg-white shadow-sm" type="file" id="createPhotoUpload" accept="image/png, image/jpeg, image/jpg">
@@ -747,7 +741,7 @@ Report immediately if lost.</textarea></div>
         document.getElementById('backInstructions').innerHTML = instList.map(i => `<li>${i}</li>`).join('');
     }
 
-    // --- DOWNLOAD LOGIC ---
+    // --- DOWNLOAD LOGIC (CHANGED SCALE TO 4 FOR HIGH RESOLUTION) ---
     function downloadCard(type, event) {
         event.preventDefault(); 
         const studentId = document.getElementById('cardId').textContent.trim();
@@ -762,8 +756,11 @@ Report immediately if lost.</textarea></div>
         mainBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Generating...';
         mainBtn.disabled = true;
 
+        // CRITICAL FIX: SCALE 4 APPLIED FOR HIGH DPI DOWNLOADING
         html2canvas(targetElement, {
-            scale: 1, useCORS: true, allowTaint: false,
+            scale: 4, 
+            useCORS: true, 
+            allowTaint: false,
             backgroundColor: (type === 'both') ? null : '#ffffff' 
         }).then(canvas => {
             const link = document.createElement('a');
