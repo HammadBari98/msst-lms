@@ -135,14 +135,14 @@ if (isset($_SESSION['action_msg'])) {
 
         /* --- FRONT DESIGN --- */
         .card-front .header { background: var(--brand-primary); color: #ffffff; text-align: center; padding: 3mm 1mm; border-bottom: 2mm solid var(--brand-accent); }
-        .card-front .header-content { display: flex; align-items: center; justify-content: center; gap: 2mm; margin-bottom: 1.5mm; }
+        .card-front .header-content { display: flex; align-items: center; justify-content: center; gap: 2mm; margin-bottom: .5mm;margin-top: 5mm; }
         .card-front .logo { width: 10mm; height: 10mm; background: white; border-radius: 50%; padding: 0.5mm; }
         .card-front .school-name { font-size: 6.5pt; font-weight: 900; line-height: 1.1; text-align: left; text-transform: uppercase; }
-        .card-front .motto { font-size: 4.5pt; font-weight: 600; letter-spacing: 0.5px; color: #f8f9fa; text-align: center; }
+        .card-front .motto { font-size: 4.5pt; font-weight: 600; letter-spacing: 0.5px; color: #f8f9fa; text-align: center; padding-top: 1mm;}
         .card-front .badge-title { background-color: #f1f3f5; color: var(--brand-primary); text-align: center; font-size: 6.5pt; font-weight: 900; padding: 1.5mm 0; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #ddd; }
         .card-front .photo-wrap { text-align: center; margin-top: 2.5mm; margin-bottom: 2.5mm; }
-        .card-front .student-photo { width: 14mm; height: 18mm; object-fit: cover; border: 1.5px solid var(--brand-primary); border-radius: 2mm; padding: 1px; background: #fff; }
-        .card-front .info-grid { display: grid; grid-template-columns: 18mm 1fr; gap: 1.2mm; padding: 0 4mm; font-size: 6pt; line-height: 1.2; }
+        .card-front .student-photo { width: 14mm; height: 15mm; object-fit: cover; border: 1.5px solid var(--brand-primary); border-radius: 2mm; padding: 1px; background: #fff; }
+        .card-front .info-grid { display: grid; grid-template-columns: 18mm 1fr; gap: 1.2mm; padding: 0 4mm; font-size: 6pt; line-height: 1; }
         .card-front .info-lbl { font-weight: 800; color: var(--brand-primary); }
         .card-front .info-val { font-weight: 700; color: var(--text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .card-front .dates-container { display: flex; justify-content: space-between; padding: 0 4mm; margin-top: 3.5mm; font-size: 5pt; font-weight: bold; color: #555; }
@@ -152,7 +152,7 @@ if (isset($_SESSION['action_msg'])) {
 
         /* --- BACK DESIGN --- */
         .card-back { background-color: #fdfdfd; }
-        .card-back .header { background: var(--brand-primary); color: white; text-align: center; padding: 2.5mm 2mm; border-bottom: 2mm solid var(--brand-accent); }
+        .card-back .header { background: var(--brand-primary); color: white; text-align: center; padding-top: 10mm;padding-bottom: 4mm; border-bottom: 2mm solid var(--brand-accent); }
         .card-back .campus-title { font-size: 7.5pt; font-weight: 900; letter-spacing: 1px; }
         .card-back .address { font-size: 6pt; margin-top: 1.5mm; line-height: 1.3; font-weight: 600; }
         .card-back .contact-grid { padding: 3mm 4mm; font-size: 6pt; border-bottom: 1px solid #eee; }
@@ -161,7 +161,7 @@ if (isset($_SESSION['action_msg'])) {
         .card-back .contact-text { font-weight: 700; color: var(--text-dark); }
         .card-back .instructions { padding: 2mm 4mm; }
         .card-back .instructions h4 { font-size: 6.5pt; font-weight: 900; color: var(--brand-primary); margin-bottom: 1.5mm; text-decoration: underline; text-decoration-color: var(--brand-accent); text-underline-offset: 2px; }
-        .card-back .instructions ul { padding-left: 3mm; margin: 0; font-size: 5.5pt; color: var(--text-dark); line-height: 1.4; font-weight: 600; }
+        .card-back .instructions ul { padding-left: 3mm; margin: 0; font-size: 5.5pt; color: var(--text-dark); line-height: 1; font-weight: 600; }
         .card-back .instructions ul li { margin-bottom: 1mm; }
 
         /* --- PRINT CSS --- */
@@ -397,7 +397,7 @@ if (isset($_SESSION['action_msg'])) {
                             </div>
                             
                             <div style="position: absolute; bottom: 4mm; width: 100%; text-align: center;">
-                                <img src="" id="cardQR" style="width: 14mm; height: 14mm;" alt="QR Code" crossorigin="anonymous">
+                                <img src="" id="cardQR" style="width: 10mm; height: 10mm;" alt="QR Code" crossorigin="anonymous">
                             </div>
                         </div>
 
