@@ -144,7 +144,7 @@ if (isset($_SESSION['action_msg'])) {
         .card-front .student-photo { width: 14mm; height: 15mm; object-fit: cover; border: 1.5px solid var(--brand-primary); border-radius: 2mm; padding: 1px; background: #fff; }
         .card-front .info-grid { display: grid; grid-template-columns: 18mm 1fr; gap: 1.2mm; padding: 0 4mm; font-size: 6pt; line-height: 1; }
         .card-front .info-lbl { font-weight: 800; color: var(--brand-primary); }
-        .card-front .info-val { font-weight: 700; color: var(--text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .card-front .info-val { font-weight: 700; color: var(--text-dark); white-space: nowrap;  }
         .card-front .dates-container { display: flex; justify-content: space-between; padding: 0 4mm; margin-top: 3.5mm; font-size: 5pt; font-weight: bold; color: #555; }
         .card-front .director-sig { position: absolute; bottom: 8mm; right: 4mm; text-align: center; font-size: 5pt; font-weight: bold; color: var(--text-dark); display: flex; flex-direction: column; align-items: center; }
         .card-front .signature-img { width: 16mm; height: 6mm; object-fit: contain; margin-bottom: 0.5mm; }
