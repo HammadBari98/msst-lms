@@ -186,7 +186,9 @@ $assessments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         "pageLength": 10,
                         "lengthMenu": [5, 10, 25, 50],
                         "order": [], // Keeps the natural ranking order from the database
-                        "destroy": true
+                        "destroy": true,
+                        "scrollY": "45vh",       // Limits table height to 45% of screen
+                        "scrollCollapse": true   // Enables smooth internal scrolling
                     });
                 }
             }).fail(function() {

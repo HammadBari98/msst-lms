@@ -54,10 +54,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $insert_stmt = $pdo->prepare("INSERT INTO student_scores (assessment_id, student_id, marks_obtained, remarks) VALUES (?, ?, ?, ?)");
                 
-                foreach ($_POST['marks'] as $student_id => $marks) {
-                    if ($marks !== '') { // Only save if marks are entered
-                        $remarks = $_POST['remarks'][$student_id] ?? '';
-                        $insert_stmt->execute([$assessment_id, $student_id, $marks, $remarks]);
+                if(isset($_POST['marks']) && is_array($_POST['marks'])) {
+                    foreach ($_POST['marks'] as $student_id => $marks) {
+                        if ($marks !== '') { // Only save if marks are entered
+                            $remarks = $_POST['remarks'][$student_id] ?? '';
+                            $insert_stmt->execute([$assessment_id, $student_id, $marks, $remarks]);
+                        }
                     }
                 }
                 
@@ -114,6 +116,9 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
     <title>Manage Scores | Teacher Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+    
     <style>
         :root {
             --primary: #007bff;
@@ -169,7 +174,7 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
-                            <table class="table table-bordered table-hover align-middle">
+                           <table class="table table-bordered table-hover align-middle" id="assessmentsTable" width="100%">
                                 <thead class="table-light">
                                     <tr>
                                         <th>Date</th>
@@ -283,7 +288,7 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
     <div class="modal fade" id="gradingModal" tabindex="-1">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
-                <form method="post">
+                <form method="post" id="gradingForm">
                     <input type="hidden" name="action" value="save_scores">
                     <input type="hidden" name="assessment_id" id="gradeAssessmentId">
                     <div class="modal-header bg-success text-white">
@@ -293,7 +298,7 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                     <div class="modal-body bg-light">
                         <div class="alert alert-info">Total Marks possible: <strong id="gradeTotalMarks"></strong></div>
                         <div class="table-responsive">
-                            <table class="table table-bordered bg-white">
+                            <table class="table table-bordered bg-white" id="gradingTable" width="100%">
                                 <thead class="table-light">
                                     <tr>
                                         <th>Student Name</th>
@@ -318,6 +323,10 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
 
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    
     <script>
         // Sidebar Toggle Script
         const sidebar = document.querySelector('.sidebar');
@@ -332,20 +341,78 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
             }
         });
 
+        // ==========================================
+        // INITIALIZE MAIN TABLE ON PAGE LOAD
+        // ==========================================
+        $(document).ready(function() {
+            if ($('#assessmentsTable').length) {
+                $('#assessmentsTable').DataTable({
+                    "pageLength": 10,       // Shows 10 assessments per page
+                    "order": [[0, 'desc']], // Automatically sorts by Date (newest first)
+                    "language": {
+                        "emptyTable": "No assessments created yet. Click 'New Assessment' to start."
+                    }
+                });
+            }
+        });
+
+        // --- The Clever Trick for Cross-Page Submission ---
+        // This intercepts the form submit and attaches the hidden pages' data
+        $('#gradingForm').on('submit', function(e) {
+            var form = this;
+            if ($.fn.DataTable.isDataTable('#gradingTable')) {
+                var dt = $('#gradingTable').DataTable();
+                
+                // Find all inputs in the datatable that are NOT currently visible in the DOM
+                dt.$('input').each(function() {
+                    if (!$.contains(document, this)) {
+                        // Append them as hidden inputs to the form right before it submits
+                        $(form).append(
+                            $('<input>')
+                                .attr('type', 'hidden')
+                                .attr('name', this.name)
+                                .val(this.value)
+                        );
+                    }
+                });
+            }
+        });
+
         // Load students for grading via AJAX
         function gradeAssessment(assessmentId, classId, title, totalMarks) {
             $('#gradeAssessmentId').val(assessmentId);
             $('#gradeTitleDisplay').text(title);
             $('#gradeTotalMarks').text(totalMarks);
-            $('#studentGradingList').html('<tr><td colspan="3" class="text-center"><div class="spinner-border text-primary"></div></td></tr>');
+            
+            // Destroy existing DataTable if the modal was opened previously
+            if ($.fn.DataTable.isDataTable('#gradingTable')) {
+                $('#gradingTable').DataTable().destroy();
+            }
+
+            $('#studentGradingList').html('<tr><td colspan="3" class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2">Loading students...</p></td></tr>');
             
             new bootstrap.Modal(document.getElementById('gradingModal')).show();
 
-            // We need a small AJAX file to fetch students in this class and their existing scores
+            // Fetch AJAX data
             $.post('../ajax/get_students_for_grading.php', { assessment_id: assessmentId, class_id: classId }, function(response) {
                 $('#studentGradingList').html(response);
+                
+                // Initialize DataTables ON THE GRADING TABLE
+                if(response.indexOf('colspan="3"') === -1) { 
+                    $('#gradingTable').DataTable({
+                        "pageLength": 10,
+                        "lengthMenu": [10, 25, 50, 100],
+                        "order": [], // Keeps the natural alphabetical order from the DB
+                        "destroy": true,
+                        "scrollY": "45vh",       // Limits table height to 45% of screen
+                        "scrollCollapse": true,  // Enables smooth internal scrolling
+                        "language": {
+                            "search": "Search Student:"
+                        }
+                    });
+                }
             }).fail(function() {
-                $('#studentGradingList').html('<tr><td colspan="3" class="text-danger text-center">Failed to load students. Ensure AJAX endpoint exists.</td></tr>');
+                $('#studentGradingList').html('<tr><td colspan="3" class="text-danger text-center py-4">Failed to load students. Ensure AJAX endpoint exists.</td></tr>');
             });
         }
     </script>

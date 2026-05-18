@@ -11,7 +11,34 @@ require_once __DIR__ . '/config/db_config.php';
 
 $leads = [];
 $error_message = '';
+// --- NEW EDIT LOGIC FOR SCHOOL LEADS ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'edit_lead') {
+    $lead_id = $_POST['id'];
+    $update_fields = [];
+    $params = [];
 
+    foreach ($_POST as $key => $value) {
+        if ($key !== 'action' && $key !== 'id') {
+            $update_fields[] = "`$key` = ?";
+            $params[] = $value;
+        }
+    }
+
+    if (!empty($update_fields)) {
+        $params[] = $lead_id;
+        // NOTE: Table is 'school_admissions' here
+        $sql = "UPDATE `school_admissions` SET " . implode(', ', $update_fields) . " WHERE id = ?";
+        try {
+            $stmt = $pdo->prepare($sql);
+            if ($stmt->execute($params)) {
+                $error_message = "<div class='alert alert-success alert-dismissible fade show'><i class='fas fa-check-circle me-2'></i>Lead updated successfully!<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+            }
+        } catch (PDOException $e) {
+            $error_message = "<div class='alert alert-danger alert-dismissible fade show'><i class='fas fa-times-circle me-2'></i>Error updating lead.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+        }
+    }
+}
+// --- END NEW EDIT LOGIC ---
 try {
     // AUTO-PATCHER: Ensure admission_status column exists
     try {
@@ -95,6 +122,9 @@ try {
                                             <td><span class="badge bg-<?= $statusClass ?>"><?= $status ?></span></td>
                                             <td>
                                                 <div class="btn-group shadow-sm">
+                                                    <button class="btn btn-sm btn-primary text-white me-1 mb-1" title="Edit Lead" onclick='prepareEditModal(<?= htmlspecialchars(json_encode($lead), ENT_QUOTES, "UTF-8") ?>)' data-bs-toggle="modal" data-bs-target="#editLeadModal">
+    <i class="fas fa-edit"></i>
+</button>
                                                     <button class="btn btn-info btn-sm text-white" title="View" data-bs-toggle="modal" data-bs-target="#viewLeadModal" onclick='prepareViewModal(<?= htmlspecialchars(json_encode($lead)) ?>)'>
                                                         <i class="fas fa-eye"></i>
                                                     </button>
@@ -126,6 +156,30 @@ try {
 
 <!-- Delete Lead Modal (Keep your existing modal HTML here) -->
 <div class="modal fade" id="deleteLeadModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Confirm Deletion</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">Are you sure you want to delete the school lead for <strong id="leadToDeleteName"></strong>?<input type="hidden" id="leadToDeleteId"></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete Lead</button></div></div></div></div>
+
+
+<div class="modal fade" id="editLeadModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Lead Information</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body bg-light">
+                    <input type="hidden" name="action" value="edit_lead">
+                    <input type="hidden" name="id" id="editLeadId">
+                    <div id="editLeadFormBody" class="row bg-white p-3 rounded shadow-sm m-1">
+                        </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -192,7 +246,38 @@ try {
         content += '</div>';
         modalBody.innerHTML = content;
     }
+// --- NEW EDIT BUILDER FUNCTION ---
+    function prepareEditModal(leadData) {
+        document.getElementById('editLeadId').value = leadData.id;
+        const formBody = document.getElementById('editLeadFormBody');
+        let content = '';
+        
+        // Exclude system fields from being edited directly
+        const skipFields = ['id', 'submission_date', 'date', 'admission_status'];
 
+        for (const key in leadData) {
+            if (skipFields.includes(key)) continue;
+
+            let formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            let value = leadData[key] ?? '';
+
+            // Make text areas for long text, and standard inputs for short text
+            if (value !== null && value.toString().length > 60) {
+                content += `
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label fw-bold text-secondary">${formattedKey}</label>
+                        <textarea class="form-control" name="${key}" rows="3">${value}</textarea>
+                    </div>`;
+            } else {
+                content += `
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold text-secondary">${formattedKey}</label>
+                        <input type="text" class="form-control" name="${key}" value="${value}">
+                    </div>`;
+            }
+        }
+        formBody.innerHTML = content;
+    }
     function prepareDeleteModal(id, name) {
         document.getElementById('leadToDeleteId').value = id;
         document.getElementById('leadToDeleteName').textContent = name;
