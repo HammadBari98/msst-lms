@@ -121,12 +121,11 @@ try {
                 <div class="card-body">
                     <div class="table-responsive">
                         <table class="table table-bordered align-middle" id="studentTable" width="100%" cellspacing="0">
-                            <thead class="table-light">
+                         <thead class="table-light">
                                 <tr>
                                     <th>User ID</th>
                                     <th>Name</th>
                                     <th>Class & Section</th>
-                                    <th>Program</th>
                                     <th>Cell No.</th>
                                     <th>Status</th>
                                     <th>Actions</th>
@@ -145,7 +144,6 @@ try {
                                             <?= !empty($section_map[$user['section_id']]) ? '- ' . htmlspecialchars($section_map[$user['section_id']]) : '' ?>
                                         </span>
                                     </td>
-                                    <td><span class="program-badge"><?= htmlspecialchars($program_name) ?></span></td>
                                     <td><?= htmlspecialchars($user['cell_no'] ?? 'N/A') ?></td>
                                     <td><span class="badge <?= $user['status'] == 'Active' ? 'bg-success' : 'bg-danger' ?>"><?= htmlspecialchars($user['status']) ?></span></td>
                                     <td>
