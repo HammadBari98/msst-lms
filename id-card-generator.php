@@ -22,17 +22,24 @@ try {
         card_fname VARCHAR(100),
         card_class VARCHAR(50),
         card_session VARCHAR(50),
+        card_program VARCHAR(100),
         issue_date VARCHAR(50),
         expiry_date VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id)
     )");
 
-    // 2. AUTO-PATCHER: Add 'card_photo' column if it is missing from an older version
+    // 2. AUTO-PATCHER: Add 'card_photo' and 'card_program' columns if they are missing
     try {
         $pdo->query("SELECT card_photo FROM generated_id_cards LIMIT 1");
     } catch (PDOException $e) {
         $pdo->exec("ALTER TABLE generated_id_cards ADD COLUMN card_photo LONGTEXT AFTER expiry_date");
+    }
+    
+    try {
+        $pdo->query("SELECT card_program FROM generated_id_cards LIMIT 1");
+    } catch (PDOException $e) {
+        $pdo->exec("ALTER TABLE generated_id_cards ADD COLUMN card_program VARCHAR(100) AFTER card_session");
     }
 
     // 3. Handle AJAX Requests (Delete & Confirm)
@@ -58,18 +65,19 @@ try {
             $fname = $_POST['card_fname'];
             $cls = $_POST['card_class'];
             $session_yr = $_POST['card_session'];
+            $program = $_POST['card_program'] ?? '';
             $issue = $_POST['issue_date'];
             $expiry = $_POST['expiry_date'];
             $photo = $_POST['custom_photo'] ?? null; 
             
             $stmt = $pdo->prepare("INSERT INTO generated_id_cards 
-                (user_id, card_name, card_fname, card_class, card_session, issue_date, expiry_date, card_photo) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?) 
+                (user_id, card_name, card_fname, card_class, card_session, card_program, issue_date, expiry_date, card_photo) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
                 ON DUPLICATE KEY UPDATE 
-                card_name=?, card_fname=?, card_class=?, card_session=?, issue_date=?, expiry_date=?, card_photo=?");
+                card_name=?, card_fname=?, card_class=?, card_session=?, card_program=?, issue_date=?, expiry_date=?, card_photo=?");
             
-            $stmt->execute([$user_id, $name, $fname, $cls, $session_yr, $issue, $expiry, $photo, 
-                            $name, $fname, $cls, $session_yr, $issue, $expiry, $photo]);
+            $stmt->execute([$user_id, $name, $fname, $cls, $session_yr, $program, $issue, $expiry, $photo, 
+                            $name, $fname, $cls, $session_yr, $program, $issue, $expiry, $photo]);
             
             $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible shadow-sm"><i class="fas fa-check-circle me-2"></i> Card successfully confirmed and saved!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
             header("Location: id-card-generator.php");
@@ -133,22 +141,22 @@ if (isset($_SESSION['action_msg'])) {
         .id-card { width: 54mm; height: 86mm; background-color: #ffffff; position: relative; box-sizing: border-box; font-family: 'Arial', sans-serif; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.15); border: 1px solid #ddd; z-index: 1; }
         .id-card::before { content: ''; position: absolute; top: 50%; left: 50%; width: 45mm; height: 45mm; transform: translate(-50%, -50%); background-image: url('assets/images/msst-logo.png'); background-size: contain; background-repeat: no-repeat; background-position: center; opacity: 0.05; z-index: -1; }
 
-        /* --- FRONT DESIGN --- */
-        .card-front .header { background: var(--brand-primary); color: #ffffff; text-align: center; padding: 3mm 1mm; border-bottom: 2mm solid var(--brand-accent); }
+    /* --- FRONT DESIGN --- */
+        .card-front .header { background: var(--brand-primary); color: #ffffff; text-align: center; padding: 2.5mm 1mm; border-bottom: 2mm solid var(--brand-accent); }
         .card-front .header-content { display: flex; align-items: center; justify-content: center; gap: 2mm; margin-bottom: .5mm;margin-top: 5mm; }
-        .card-front .logo { width: 10mm; height: 10mm; background: white; border-radius: 50%; padding: 0.5mm; }
-        .card-front .school-name { font-size: 6.5pt; font-weight: 900; line-height: 1.1; text-align: left; text-transform: uppercase; }
-        .card-front .motto { font-size: 4.5pt; font-weight: 600; letter-spacing: 0.5px; color: #f8f9fa; text-align: center; padding-top: 1mm;}
-        .card-front .badge-title { background-color: #f1f3f5; color: var(--brand-primary); text-align: center; font-size: 6.5pt; font-weight: 900; padding: 1.5mm 0; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #ddd; }
-        .card-front .photo-wrap { text-align: center; margin-top: 2.5mm; margin-bottom: 2.5mm; }
-        .card-front .student-photo { width: 14mm; height: 15mm; object-fit: cover; border: 1.5px solid var(--brand-primary); border-radius: 2mm; padding: 1px; background: #fff; }
-        .card-front .info-grid { display: grid; grid-template-columns: 18mm 1fr; gap: 1.2mm; padding: 0 4mm; font-size: 6pt; line-height: 1; }
+        .card-front .logo { width: 9mm; height: 9mm; background: white; border-radius: 50%; padding: 0.5mm; }
+        .card-front .school-name { font-size: 5.5pt; font-weight: 900; line-height: 1.1; text-align: left; text-transform: uppercase; }
+        .card-front .motto { font-size: 4pt; font-weight: 600; letter-spacing: 0.5px; color: #f8f9fa; text-align: center; padding-top: 1mm;}
+        .card-front .badge-title { background-color: #f1f3f5; color: var(--brand-primary); text-align: center; font-size: 5.5pt; font-weight: 900; padding: 1.5mm 0; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #ddd; }
+        .card-front .photo-wrap { text-align: center; margin-top: 2mm; margin-bottom: 2mm; }
+        .card-front .student-photo { width: 13mm; height: 14mm; object-fit: cover; border: 1.5px solid var(--brand-primary); border-radius: 2mm; padding: 1px; background: #fff; }
+        .card-front .info-grid { display: grid; grid-template-columns: 18mm 1fr; gap: 1mm; padding: 0 4mm; font-size: 5pt; line-height: 1; }
         .card-front .info-lbl { font-weight: 800; color: var(--brand-primary); }
         .card-front .info-val { font-weight: 700; color: var(--text-dark); white-space: nowrap;  }
-        .card-front .dates-container { display: flex; justify-content: space-between; padding: 0 4mm; margin-top: 3.5mm; font-size: 5pt; font-weight: bold; color: #555; }
-        .card-front .director-sig { position: absolute; bottom: 8mm; right: 4mm; text-align: center; font-size: 5pt; font-weight: bold; color: var(--text-dark); display: flex; flex-direction: column; align-items: center; }
-        .card-front .signature-img { width: 16mm; height: 6mm; object-fit: contain; margin-bottom: 0.5mm; }
-        .card-front .validity-bar { position: absolute; bottom: 0; width: 100%; background: var(--brand-primary); color: white; text-align: center; font-size: 5.5pt; font-weight: bold; padding: 1.5mm 0; letter-spacing: 0.5px; }
+        .card-front .dates-container { display: flex; justify-content: space-between; padding: 0 4mm; margin-top: 2.5mm; font-size: 4.5pt; font-weight: bold; color: #555; }
+        .card-front .director-sig { position: absolute; bottom: 7mm; right: 4mm; text-align: center; font-size: 4.5pt; font-weight: bold; color: var(--text-dark); display: flex; flex-direction: column; align-items: center; }
+        .card-front .signature-img { width: 15mm; height: 5mm; object-fit: contain; margin-bottom: 0.5mm; }
+        .card-front .validity-bar { position: absolute; bottom: 0; width: 100%; background: var(--brand-primary); color: white; text-align: center; font-size: 5pt; font-weight: bold; padding: 1.5mm 0; letter-spacing: 0.5px; }
 
         /* --- BACK DESIGN --- */
         .card-back { background-color: #fdfdfd; }
@@ -246,6 +254,7 @@ if (isset($_SESSION['action_msg'])) {
                                             'fname' => $card['card_fname'],
                                             'class' => $card['card_class'],
                                             'session' => $card['card_session'],
+                                            'program' => $card['card_program'] ?? '',
                                             'issue' => $card['issue_date'],
                                             'expiry' => $card['expiry_date'],
                                             'photo' => $picUrl
@@ -292,6 +301,7 @@ if (isset($_SESSION['action_msg'])) {
                                 <input type="hidden" name="user_id" id="save_user_id">
                                 <input type="hidden" name="card_name" id="save_card_name">
                                 <input type="hidden" name="card_fname" id="save_card_fname">
+                                <input type="hidden" name="card_program" id="save_card_program">
                                 <input type="hidden" name="card_class" id="save_card_class">
                                 <input type="hidden" name="card_session" id="save_card_session">
                                 <input type="hidden" name="issue_date" id="save_issue_date">
@@ -353,6 +363,7 @@ if (isset($_SESSION['action_msg'])) {
                                 <div class="info-lbl">F. Name:</div><div class="info-val" id="cardFName"></div>
                                 <div class="info-lbl">Student ID:</div><div class="info-val" id="cardId"></div>
                                 <div class="info-lbl">Class:</div><div class="info-val" id="cardClass"></div>
+                                <div class="info-lbl">Program:</div><div class="info-val" id="cardProgram"></div>
                                 <div class="info-lbl">Session:</div><div class="info-val" id="cardSession"></div>
                             </div>
                             
@@ -461,8 +472,9 @@ if (isset($_SESSION['action_msg'])) {
 
                     <div class="col-md-6"><label class="form-label fw-bold">Card Name</label><input type="text" class="form-control" id="createInputName"></div>
                     <div class="col-md-6"><label class="form-label fw-bold">Father's Name</label><input type="text" class="form-control" id="createInputFName"></div>
-                    <div class="col-md-6"><label class="form-label fw-bold">Class / Designation</label><input type="text" class="form-control" id="createInputClass"></div>
-                    <div class="col-md-6"><label class="form-label fw-bold">Session</label><input type="text" class="form-control" id="createInputSession"></div>
+                    <div class="col-md-4"><label class="form-label fw-bold">Class / Designation</label><input type="text" class="form-control" id="createInputClass"></div>
+                    <div class="col-md-4"><label class="form-label fw-bold">Program</label><input type="text" class="form-control" id="createInputProgram"></div>
+                    <div class="col-md-4"><label class="form-label fw-bold">Session</label><input type="text" class="form-control" id="createInputSession"></div>
                     <div class="col-md-6 mt-3"><label class="form-label fw-bold">Issue Date</label><input type="text" class="form-control" id="createInputIssue"></div>
                     <div class="col-md-6 mt-3"><label class="form-label fw-bold">Expiry Date</label><input type="text" class="form-control" id="createInputExpiry"></div>
                 </div>
@@ -502,9 +514,10 @@ if (isset($_SESSION['action_msg'])) {
                             <div class="col-12"><hr class="mt-1 mb-2"></div>
                             <div class="col-md-6"><label class="form-label fw-bold">Student Name</label><input type="text" class="form-control" id="editName"></div>
                             <div class="col-md-6"><label class="form-label fw-bold">Father's Name</label><input type="text" class="form-control" id="editFName"></div>
-                            <div class="col-md-4"><label class="form-label fw-bold">Student ID</label><input type="text" class="form-control" id="editId"></div>
-                            <div class="col-md-4"><label class="form-label fw-bold">Class / Designation</label><input type="text" class="form-control" id="editClass"></div>
-                            <div class="col-md-4"><label class="form-label fw-bold">Session</label><input type="text" class="form-control" id="editSession"></div>
+                            <div class="col-md-3"><label class="form-label fw-bold">Student ID</label><input type="text" class="form-control" id="editId"></div>
+                            <div class="col-md-3"><label class="form-label fw-bold">Class</label><input type="text" class="form-control" id="editClass"></div>
+                            <div class="col-md-3"><label class="form-label fw-bold">Program</label><input type="text" class="form-control" id="editProgram"></div>
+                            <div class="col-md-3"><label class="form-label fw-bold">Session</label><input type="text" class="form-control" id="editSession"></div>
                             <div class="col-md-6 mt-3"><label class="form-label fw-bold">Issue Date</label><input type="text" class="form-control" id="editIssue"></div>
                             <div class="col-md-6 mt-3"><label class="form-label fw-bold">Expiry Date</label><input type="text" class="form-control" id="editExpiry"></div>
                         </div>
@@ -600,6 +613,7 @@ Report immediately if lost.</textarea></div>
         document.getElementById('createInputSession').value = option.getAttribute('data-session');
         document.getElementById('createInputIssue').value = option.getAttribute('data-issue');
         document.getElementById('createInputExpiry').value = option.getAttribute('data-expiry');
+        document.getElementById('createInputProgram').value = '';
     }
 
     function previewNewCard() {
@@ -635,15 +649,22 @@ Report immediately if lost.</textarea></div>
         document.getElementById('save_expiry_date').value = document.getElementById('createInputExpiry').value;
         document.getElementById('save_custom_photo').value = customPhoto; 
 
+        document.getElementById('cardProgram').textContent = document.getElementById('createInputProgram').value;
+        document.getElementById('save_card_program').value = document.getElementById('createInputProgram').value;
+
         document.getElementById('previewModeControls').style.display = 'block';
         document.getElementById('confirmedModeControls').style.display = 'none';
         document.getElementById('studio-tab').removeAttribute('disabled');
         const studioTab = new bootstrap.Tab(document.querySelector('#studio-tab'));
+
+        
         studioTab.show();
     }
 
     // --- WORKFLOW 2: LOAD CONFIRMED RECORD ---
     function openInStudio(data) {
+        document.getElementById('cardProgram').textContent = data.program || '';
+        document.getElementById('editProgram').value = data.program || '';
         document.getElementById('cardName').textContent = data.name;
         document.getElementById('cardFName').textContent = data.fname;
         document.getElementById('cardId').textContent = data.id;
@@ -719,7 +740,7 @@ Report immediately if lost.</textarea></div>
     function applyAdvancedUpdates() {
         const eId = document.getElementById('editId').value;
         const eExpiry = document.getElementById('editExpiry').value;
-        
+        document.getElementById('cardProgram').textContent = document.getElementById('editProgram').value;
         document.getElementById('cardName').textContent = document.getElementById('editName').value;
         document.getElementById('cardFName').textContent = document.getElementById('editFName').value;
         document.getElementById('cardId').textContent = eId;
