@@ -272,7 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $days_to_add = $i * $installment_days;
                         $slip_total = $installment_amount + ($installments > 1 ? $installment_charge : 0);
                         
-                        $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date) VALUES (?, ?, ?, ?, DATE_ADD(?, INTERVAL ? DAY), 'Pending', ?, NOW())")->execute([$slip_no, $student_id, $target_date, $slip_total, $target_date, $days_to_add + 10, $student_cat]);
+                        $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date) VALUES (?, ?, ?, ?, DATE_ADD(DATE_ADD(?, INTERVAL 1 MONTH), INTERVAL ? DAY), 'Pending', ?, NOW())")->execute([$slip_no, $student_id, $target_date, $slip_total, $target_date, $days_to_add + 10, $student_cat]);
                         
                         $comp_insert = $pdo->prepare("INSERT INTO fee_slip_components (slip_no, component_id, component_name, amount, component_type) VALUES (?, ?, ?, ?, ?)");
                         foreach ($component_data as $comp) {
@@ -380,7 +380,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 for ($i = 0; $i < $installments; $i++) {
                     $slip_no = $installments > 1 ? $base_slip_no . "-" . ($i + 1) : $base_slip_no;
                     $slip_total = $installment_amount + ($installments > 1 ? $installment_charge : 0);
-                    $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date) VALUES (?, ?, ?, ?, DATE_ADD(?, INTERVAL ? DAY), 'Pending', ?, NOW())")->execute([$slip_no, $student['id'], $target_date, $slip_total, $target_date, ($i * $installment_days) + 10, $student_cat]);
+                    $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date) VALUES (?, ?, ?, ?, DATE_ADD(DATE_ADD(?, INTERVAL 1 MONTH), INTERVAL ? DAY), 'Pending', ?, NOW())")->execute([$slip_no, $student['id'], $target_date, $slip_total, $target_date, ($i * $installment_days) + 10, $student_cat]);
                     
                     $comp_insert = $pdo->prepare("INSERT INTO fee_slip_components (slip_no, component_id, component_name, amount, component_type) VALUES (?, ?, ?, ?, ?)");
                     foreach ($component_data as $comp) { $comp_insert->execute([$slip_no, $comp['id'], $comp['name'], $comp['amount'] / $installments, $comp['type']]); }
@@ -474,7 +474,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Exception $e) { $pdo->rollBack(); $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible"><i class="fas fa-times-circle me-2"></i>Error: ' . $e->getMessage() . '</div>'; }
         header('Location: ' . $_SERVER['PHP_SELF']); exit;
     }
+
+    // ==========================================
+    // 8. ADD NEW PROGRAM / FEE CATEGORY
+    // ==========================================
+    if (isset($_POST['add_program_action'])) {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO fee_categories (name, tuition_amount, description, is_active) VALUES (?, ?, ?, 1)");
+            $stmt->execute([
+                $_POST['program_name'],
+                floatval($_POST['tuition_amount']),
+                $_POST['program_desc']
+            ]);
+            $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible"><i class="fas fa-check-circle me-2"></i>New program added successfully!</div>';
+        } catch (Exception $e) {
+            $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible"><i class="fas fa-times-circle me-2"></i>Error: ' . $e->getMessage() . '</div>';
+        }
+        header('Location: ' . $_SERVER['PHP_SELF']); exit;
+    }
+    // ==========================================
+    // 9. UPDATE VOUCHER DATES
+    // ==========================================
+    if (isset($_POST['update_dates_action'])) {
+        try {
+            $formatted_issue_date = $_POST['issue_date'] . date(' H:i:s');
+            $pdo->prepare("UPDATE fee_slips SET generated_date = ?, due_date = ? WHERE slip_no = ?")->execute([$formatted_issue_date, $_POST['due_date'], $_POST['slip_no']]);
+            $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible"><i class="fas fa-check-circle me-2"></i>Dates updated successfully!</div>';
+        } catch (Exception $e) {
+            $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible"><i class="fas fa-times-circle me-2"></i>Error: ' . $e->getMessage() . '</div>';
+        }
+        header('Location: ' . $_SERVER['PHP_SELF']); exit;
+    }
 }
+
 
 $active_components_json = json_encode(array_values($active_components));
 $fee_categories_json = json_encode(array_values($fee_categories));
@@ -490,6 +522,10 @@ $fee_categories_json = json_encode(array_values($fee_categories));
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="style.css">
     <style>
+    .student-info-table td.value-cell, .fees-table td ,.total-payable-section div, .fees-table th ,.student-info-table th{
+       font-size: 0.8rem !important;
+        }
+
         .program-badge { font-size: 0.75rem; padding: 4px 8px; background-color: #0d6efd; color: white; border-radius: 6px; display: inline-block; font-weight: 500;}
         .student-list-item { cursor: pointer; transition: background-color 0.2s; }
         .student-list-item:hover { background-color: #f8f9fa; }
@@ -502,18 +538,18 @@ $fee_categories_json = json_encode(array_values($fee_categories));
         .voucher-container { border: 1px dashed #666; padding: 10px; background-color: #fff; height: 100%; }
         .header-section { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
         .logo-container { display: flex; align-items: center; }
-        .logo { width: 70px; height: auto; margin-right: 10px; border: 1px solid #ddd; padding: 3px; }
-        .school-info { font-size: 0.7rem; line-height: 1.2; }
+        .logo { width: 50px; height: auto; margin-right: 10px; border: 1px solid #ddd; padding: 3px; }
+        .school-info { font-size: 0.7rem; line-height: 1.2; flex: 1; }
         .school-info strong { font-size: 0.8rem; display: block; margin-bottom: 2px; }
-        .affiliated-copy-type { text-align: right; font-size: 0.75rem; }
-        .affiliated-copy-type span { display: block; border: 1px solid #000; padding: 3px 7px; margin-bottom: 4px; min-width: 120px; text-align: center; }
+        .affiliated-copy-type { text-align: right; font-size: 0.75rem; flex-shrink: 0; margin-left: 5px; }
+        .affiliated-copy-type span { display: block; border: 1px solid #000; padding: 2px 5px; margin-bottom: 4px; min-width: 90px; text-align: center; }
         .copy-type-label { font-weight: bold; background-color: #f0f0f0; }
         .bank-details { text-align: center; font-size: 0.8rem; font-weight: bold; margin-bottom: 8px; padding: 4px; border: 1px solid #000; }
         
         .student-info-table, .fees-table { width: 100%; margin-bottom: 8px; font-size: 0.65rem; border-collapse: collapse; }
         .student-info-table th, .student-info-table td, .fees-table th, .fees-table td { border: 1px solid #000; padding: 3px 3px; vertical-align: middle; text-align: left; }
         .student-info-table th, .fees-table th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
-        .student-info-table td.student-name-value { font-weight: bold; text-align: left !important; }
+        .student-info-table td.student-name-value { font-weight: bold; text-align: left !important; font-size:0.8rem; }
         .student-info-table td.value-cell, .fees-table td { text-align: center !important; font-weight: bold; }
         .due-date-cell { color: #fff !important; background-color: #dc3545 !important; font-weight: bold; text-align: center !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         
@@ -606,6 +642,7 @@ $fee_categories_json = json_encode(array_values($fee_categories));
                                                     <?php if ($record['status'] != 'Paid'): ?>
                                                     <li><a class="dropdown-item py-2" href="#" onclick="preparePayment('<?= htmlspecialchars($record['slip_no']) ?>', '<?= htmlspecialchars($record['full_name'], ENT_QUOTES) ?>', <?= $record['amount'] ?>)"><i class="fas fa-cash-register text-success me-2"></i> Record Payment</a></li>
                                                     <li><a class="dropdown-item py-2" href="#" onclick="applyScholarshipModal('<?= htmlspecialchars($record['slip_no']) ?>', '<?= htmlspecialchars($record['full_name'], ENT_QUOTES) ?>', '<?= $current_scholarship ?>')"><i class="fas fa-percent text-warning me-2"></i> Apply Scholarship</a></li>
+                                                    <li><a class="dropdown-item py-2" href="#" onclick="editDatesModal('<?= htmlspecialchars($record['slip_no']) ?>', '<?= htmlspecialchars($record['full_name'], ENT_QUOTES) ?>', '<?= date('Y-m-d', strtotime($record['generated_date'])) ?>', '<?= $record['due_date'] ?>')"><i class="fas fa-calendar-alt text-primary me-2"></i> Edit Dates</a></li>
                                                     <?php endif; ?>
                                                     <li><hr class="dropdown-divider"></li>
                                                     <li>
@@ -752,7 +789,11 @@ $fee_categories_json = json_encode(array_values($fee_categories));
                         </div>
                     </div>
                 </div>
-                <div class="row mt-4"><div class="col-12"><div class="card border-0 shadow-sm"><div class="card-header bg-white border-bottom py-3"><h6 class="mb-0 fw-bold text-dark">Program Base Fees (Monthly)</h6></div>
+                <div class="row mt-4"><div class="col-12"><div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-bold text-dark">Program Base Fees (Monthly)</h6>
+                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addProgramModal"><i class="fas fa-plus me-1"></i> Add New Program</button>
+                    </div>
                     <div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead class="table-light"><tr><th class="ps-4">Program</th><th>Base Fee (PKR)</th><th>Description</th><th class="text-end pe-4">Action</th></tr></thead><tbody>
                         <?php foreach ($fee_categories as $cat): ?>
                         <tr><td class="ps-4"><span class="program-badge"><?= htmlspecialchars($cat['name']) ?></span></td><td class="fw-bold text-primary fs-5">PKR <?= number_format($cat['tuition_amount'], 2) ?></td><td><?= htmlspecialchars($cat['description']) ?></td><td class="text-end pe-4"><button class="btn btn-warning btn-sm" onclick="editCategoryFee(<?= $cat['id'] ?>, '<?= htmlspecialchars($cat['name'], ENT_QUOTES) ?>', <?= $cat['tuition_amount'] ?>)"><i class="fas fa-edit me-1"></i> Edit</button></td></tr>
@@ -763,7 +804,35 @@ $fee_categories_json = json_encode(array_values($fee_categories));
         </div>
     </div>
 </div>
-
+<div class="modal fade" id="editDatesModal" tabindex="-1" style="z-index: 1060;">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white border-0 py-3">
+                <h5 class="modal-title fw-bold"><i class="fas fa-calendar-day me-2"></i>Update Dates</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="update_dates_action" value="1">
+                <input type="hidden" id="editDatesSlipNo" name="slip_no">
+                <div class="modal-body bg-light p-4 text-center">
+                    <p class="text-muted small mb-3">Student: <strong id="editDatesStudentName" class="text-dark"></strong></p>
+                    <div class="mb-3 text-start">
+                        <label class="form-label text-muted small fw-bold">Issue Date</label>
+                        <input type="date" class="form-control fw-bold" name="issue_date" id="editIssueDate" required>
+                    </div>
+                    <div class="mb-1 text-start">
+                        <label class="form-label text-muted small fw-bold">Due Date</label>
+                        <input type="date" class="form-control fw-bold text-danger" name="due_date" id="editDueDate" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-top bg-white">
+                    <button type="button" class="btn btn-secondary w-100 mb-2" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary w-100 fw-bold shadow-sm">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <div class="modal fade" id="recordPaymentModal" tabindex="-1">
     <div class="modal-dialog"><div class="modal-content"><form method="post"><input type="hidden" name="record_payment_action" value="1"><input type="hidden" id="paymentSlipNo" name="slip_no">
         <div class="modal-header"><h5 class="modal-title">Record Payment</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -822,6 +891,37 @@ $fee_categories_json = json_encode(array_values($fee_categories));
         </form></div></div>
 </div>
 
+<div class="modal fade" id="addProgramModal" tabindex="-1" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-plus-circle me-2"></i>Add New Program</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="add_program_action" value="1">
+                <div class="modal-body p-4 bg-light">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Program Name</label>
+                        <input type="text" class="form-control" name="program_name" placeholder="e.g. First Year (Arts)" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Base Monthly Fee (PKR)</label>
+                        <input type="number" class="form-control" name="tuition_amount" placeholder="e.g. 5000" required min="0" step="0.01">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fw-bold text-dark">Description</label>
+                        <input type="text" class="form-control" name="program_desc" placeholder="e.g. Intermediate Arts Degree">
+                    </div>
+                </div>
+                <div class="modal-footer border-top bg-white">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4">Save Program</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
@@ -940,7 +1040,7 @@ function generateVoucherHTML(record, components, copyType) {
             breakdownHtml += `
                 <tr>
                     <td>${component.component_name || 'Fee Component'}</td>
-                    <td class="text-end" style="text-align: right;">${amount.toFixed(0)}</td>
+                    <td class="text-end" style="text-align: center;">${amount.toFixed(0)}</td>
                 </tr>
             `;
         });
@@ -984,7 +1084,7 @@ function generateVoucherHTML(record, components, copyType) {
             <div class="voucher-container">
                 <div class="header-section">
                     <div class="logo-container">
-                        <img src="http://localhost/msst/lms/assets/images/msst-logo.png" alt="School Logo" class="logo">
+                        <img src="assets/images/msst-logo.png" alt="School Logo" class="logo">
                         <div class="school-info">
                             <strong>Muhaddisa School of Science and Technology</strong><br>
                             Head Office : Kushmara Toq, Near Fatima Jinnah Girls HSS, Quaidabad Skardu<br>
@@ -1008,6 +1108,10 @@ function generateVoucherHTML(record, components, copyType) {
                     <tr>
                         <th style="width: 22%;">NAME</th>
                         <td colspan="3" class="student-name-value" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${record.full_name || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                        <th style="width: 22%;">F/NAME</th>
+                        <td colspan="3" class="student-name-value" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${record.father_name || 'N/A'}</td>
                     </tr>
                     <tr>
                         <th style="width: 22%;">ID</th>
@@ -1038,21 +1142,21 @@ function generateVoucherHTML(record, components, copyType) {
                     <thead>
                         <tr>
                             <th>Fee Component</th>
-                            <th style="width: 40%; text-align: right;">Amount (PKR)</th>
+                            <th style="width: 40%; text-align: center;">Amount (PKR)</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${breakdownHtml}
                         <tr>
-                            <th class="text-end" style="text-align: right;">TOTAL</th>
-                            <td class="text-end" style="text-align: right;"><strong>${recordAmount.toFixed(0)}</strong></td>
+                            <th class="" style="text-align: center; font-weight: bold;">TOTAL</th>
+                            <td class="" style="text-align: center;"><strong>${recordAmount.toFixed(0)}</strong></td>
                         </tr>
                     </tbody>
                 </table>
                 
                 <div class="total-payable-section">
-                    <div>BEFORE DUE DATE<br><strong style="font-size: 10px;">PKR ${recordAmount.toFixed(0)}</strong></div>
-                    <div>AFTER DUE DATE<br><strong style="font-size: 10px;">PKR ${(recordAmount + 500).toFixed(0)}</strong></div>
+                    <div>BEFORE DUE DATE<br><strong style="font-size: 0.8rem">PKR ${recordAmount.toFixed(0)}</strong></div>
+                    <div>AFTER DUE DATE<br><strong style="font-size: 0.8rem">PKR ${(recordAmount + 500).toFixed(0)}</strong></div>
                 </div>
                 
                 <div class="bank-fill-note">To be filled by the bank</div>
@@ -1092,38 +1196,44 @@ function printVoucher() {
     printWindow.document.write(`
     <html><head><title>Fee Slip - MSST</title>
     <style>
-        @page { size: A4 landscape; margin: 3mm; }
+        @page { size: A4 landscape; margin: 4mm; }
         body { margin: 0; padding: 0; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff; }
         .voucher-page { display: flex; flex-direction: row; justify-content: space-between; width: 100%; height: 195mm; box-sizing: border-box; }
         .voucher-col { width: 32%; height: 100%; box-sizing: border-box; }
         .voucher-instance { height: 100%; }
-        .voucher-container { border: 1px dashed #000; height: 100%; padding: 5px; display: flex; flex-direction: column; box-sizing: border-box; }
-        .header-section { display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 3px; }
-        .logo-container { display: flex; align-items: center; }
-        .logo { width: 45px; height: auto; margin-right: 5px; border: 1px solid #ddd; padding: 2px; }
-        .school-info { font-size: 7px; line-height: 1.1; }
-        .school-info strong { font-size: 10px; margin-bottom: 1px; display: block; }
-        .affiliated-copy-type { text-align: right; font-size: 7px; }
-        .affiliated-copy-type span { display: block; border: 1px solid #000; padding: 1px 3px; margin-bottom: 1px; }
-        .copy-type-label { font-weight: bold; background-color: #e9ecef !important; font-size: 9px !important;}
-        .bank-details { text-align: center; font-size: 8px; font-weight: bold; border: 1px solid #000; padding: 2px; margin-bottom: 3px; background-color: #f8f9fa !important; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 3px; font-size: 7px; table-layout: fixed; }
-        th, td { border: 1px solid #000; padding: 2px; text-align: left; overflow: hidden; white-space: nowrap; }
+        .voucher-container { border: 1px dashed #000; height: 100%; padding: 6px; display: flex; flex-direction: column; box-sizing: border-box; }
+        
+        /* --- FIXED HEADER LAYOUT --- */
+        .header-section { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1.5px solid #000; padding-bottom: 4px; margin-bottom: 4px; gap: 4px; }
+        .logo-container { display: flex; align-items: flex-start; flex: 1; min-width: 0; }
+        .logo { width: 40px; height: auto; margin-right: 5px; border: 1px solid #ddd; padding: 2px; flex-shrink: 0; }
+        .school-info { font-size: 7.5px; line-height: 1.2; word-wrap: break-word; padding-top: 1px; }
+        .school-info strong { font-size: 9.5px; margin-bottom: 2px; display: block; text-transform: uppercase; line-height: 1.1; }
+        
+        /* OVERRIDE THE OVERLAPPING BADGE */
+        .affiliated-copy-type { width: 85px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; }
+        .affiliated-copy-type br { display: none; } /* Hide line breaks to force cleaner stacking */
+        .affiliated-copy-type span { display: block !important; border: 1px solid #000 !important; padding: 3px 0 !important; margin-bottom: 2px !important; width: 100% !important; text-align: center !important; font-size: 8px !important; font-weight: bold !important; box-sizing: border-box; }
+        .copy-type-label { background-color: #e9ecef !important; font-size: 9px !important; }
+        
+        /* --- FIXED BODY LAYOUT --- */
+        .bank-details { text-align: center; font-size: 9px; font-weight: bold; border: 1px solid #000; padding: 3px; margin-bottom: 4px; background-color: #f8f9fa !important; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 9.5px; table-layout: fixed; }
+        th, td { border: 1px solid #000; padding: 3px; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
         th { background-color: #f2f2f2 !important; font-weight: bold; text-align: center; }
         td { text-align: center; }
         .student-name-value { font-weight: bold; text-align: left !important; }
         .value-cell { font-weight: bold; text-align: center !important; }
-        .due-date-cell { background-color: #dc3545 !important; color: white !important; font-weight: bold; text-align: center !important; font-size: 9px !important; vertical-align: middle !important;}
-        .total-payable-section { display: flex; justify-content: space-between; margin-top: auto; font-size: 8px; gap: 3px;}
-        .total-payable-section div { border: 1px solid #000; padding: 3px; font-weight: bold; background-color: #f8f9fa !important; flex: 1; text-align: center; }
-        .bank-fill-note { font-size: 6px; text-align: right; margin-top: 3px; font-style: italic; }
-        .late-payment-note { font-size: 7px; margin-top: 2px; padding: 2px; border: 1px solid #000; font-weight: bold; text-align: left; }
-        .footer-note { font-size: 7px; margin-top: 3px; border-top: 1px solid #000; padding-top: 3px; text-align: left; }
+        .due-date-cell { background-color: #dc3545 !important; color: white !important; font-weight: bold; text-align: center !important; font-size: 11px !important; vertical-align: middle !important; padding: 4px !important;}
+        .total-payable-section { display: flex; justify-content: space-between; margin-top: auto; font-size: 9px; gap: 4px;}
+        .total-payable-section div { border: 1px solid #000; padding: 4px; font-weight: bold; background-color: #f8f9fa !important; flex: 1; text-align: center; }
+        .bank-fill-note { font-size: 8px; text-align: right; margin-top: 4px; font-style: italic; }
+        .late-payment-note { margin-top: 3px; padding: 3px; border: 1px solid #000; font-weight: bold; text-align: left; font-size: 8.5px; line-height: 1.2; }
+        .footer-note { margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; text-align: left; font-size: 8.5px; line-height: 1.2; }
     </style></head>
     <body><div class="voucher-page"><div class="voucher-col">${parentCopy}</div><div class="voucher-col">${hostelCopy}</div><div class="voucher-col">${bankCopy}</div></div></body></html>`);
     printWindow.document.close(); printWindow.focus(); setTimeout(() => { printWindow.print(); printWindow.close(); }, 300);
 }
-
 function editComponent(id, name, amount, type, desc, optional, active) {
     $('#editCompId').val(id); $('#editCompName').val(name); $('#editCompAmount').val(amount); $('#editCompType').val(type); $('#editCompDesc').val(desc); $('#editCompOptional').prop('checked', optional); $('#editCompActive').prop('checked', active);
     new bootstrap.Modal(document.getElementById('editComponentModal')).show();
@@ -1201,6 +1311,14 @@ $('#enableClassInstallments').on('change', function() {
     if ($(this).is(':checked')) { $('.installment-fields-class').slideDown(); $('#classInstallments').val(1); const c = activeComponents.find(x => x.name.toLowerCase().includes('installment charge')); if(c) $('#generateClassSlipsModal input[name="installment_charge"]').val(parseFloat(c.amount).toFixed(2)); } else { $('.installment-fields-class').slideUp(); $('#classInstallments').val(1); }
 });
 $('#singleInstallments, input[name="installment_charge"]').on('change keyup', () => { if (selectedStudent) calculateFeeForStudent(selectedStudent); });
+
+function editDatesModal(slipNo, studentName, issueDate, dueDate) {
+    document.getElementById('editDatesSlipNo').value = slipNo;
+    document.getElementById('editDatesStudentName').textContent = studentName;
+    document.getElementById('editIssueDate').value = issueDate;
+    document.getElementById('editDueDate').value = dueDate;
+    new bootstrap.Modal(document.getElementById('editDatesModal')).show();
+}
 </script>
 </body>
 </html>

@@ -17,10 +17,10 @@ if (empty($slip_no)) {
 }
 
 try {
-    // Fetch the main slip record including Class, Section, and Program (fee_category)
+    // Fetch the main slip record including Class, Section, Program, and Father's Name
     $stmt = $pdo->prepare("
         SELECT fs.*, u.full_name, u.user_id_string, 
-               c.class_name, s.section_name, sd.fee_category
+               c.class_name, s.section_name, sd.fee_category, sd.father_name
         FROM fee_slips fs
         LEFT JOIN users u ON fs.student_id = u.id
         LEFT JOIN student_details sd ON u.id = sd.user_id
