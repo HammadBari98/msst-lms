@@ -1083,7 +1083,7 @@ function generateVoucherHTML(record, components, copyType) {
             <div class="mv-header">
                 <img src="assets/images/msst-logo.png" alt="MSST Logo" class="mv-logo">
                 <div class="mv-school-text">
-                    <div class="mv-school-name">Muhaddisa School of Science & Tech</div>
+                    <div class="mv-school-name">Muhaddisa School of Science & Technology</div>
                     <div class="mv-school-address">Kushmara Toq, Near Fatima Jinnah Girls HSS, Quaidabad Skardu<br>0317-9174495 | www.msstskardu.com</div>
                 </div>
                 <div class="mv-copy-badge">
@@ -1164,7 +1164,7 @@ function generateVoucherHTML(record, components, copyType) {
             </div>
             
             <div class="mv-footer">
-                <span class="mv-warning">LATE PAYMENT:</span> After due date Rs 25/- will be charged per day. Duplicate fee is Rs 50/-.<br>
+                <span class="mv-warning">LATE PAYMENT:</span> After due date flat Rs. 500/- will be charged per month. Duplicate fee is Rs 50/-.<br>
                 <strong>Note:</strong> Rs 550/- charged as Summer Task if dues aren't paid same month.<br>
                 <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #dee2e6; text-align: right; font-style: italic;">To be filled by bank</div>
             </div>
