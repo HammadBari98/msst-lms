@@ -1092,8 +1092,10 @@ function generateVoucherHTML(record, components, copyType) {
                 </div>
             </div>
             
-            <div class="mv-bank-banner">
-                Soneri Bank Main Branch Skardu: Muhaddisa School of Science and Technology &nbsp;|&nbsp; A/C: 003320015592867
+            <div class="mv-bank-banner" style="line-height: 1.4; padding: 6px 4px;">
+                Soneri Bank Main Branch Skardu<br>
+                Title: Muhaddisa School of Science and Technology<br>
+                Account: 003320015592867
             </div>
             
             ${installmentBadge}
@@ -1177,7 +1179,7 @@ function viewDetailedVoucher(slipNo) {
         url: 'ajax/get_fee_voucher_details.php', method: 'POST', dataType: 'json', data: { slip_no: slipNo },
         success: function(data) {
             if (data.success && data.record && data.components) {
-                $('#detailedVoucherContent').html(`<div class="print-button-container no-print text-center my-3"><button class="btn btn-primary" onclick="printVoucher()"><i class="fas fa-print"></i> Print Copies</button></div><div class="voucher-page-content"><div id="parent-copy">${generateVoucherHTML(data.record, data.components, 'PARENT COPY')}</div><div id="hostel-copy">${generateVoucherHTML(data.record, data.components, 'HOSTEL COPY')}</div><div id="bank-copy">${generateVoucherHTML(data.record, data.components, 'BANK COPY')}</div></div>`);
+                $('#detailedVoucherContent').html(`<div class="print-button-container no-print text-center my-3"><button class="btn btn-primary" onclick="printVoucher()"><i class="fas fa-print"></i> Print Copies</button></div><div class="voucher-page-content"><div id="parent-copy">${generateVoucherHTML(data.record, data.components, 'PARENT COPY')}</div><div id="hostel-copy">${generateVoucherHTML(data.record, data.components, 'MSST COPY')}</div><div id="bank-copy">${generateVoucherHTML(data.record, data.components, 'BANK COPY')}</div></div>`);
             } else { $('#detailedVoucherContent').html('<div class="alert alert-danger m-3">Failed to load details.</div>'); }
         }, error: () => $('#detailedVoucherContent').html('<div class="alert alert-danger m-3">Error loading details. Ensure ajax/get_fee_voucher_details.php is correctly created.</div>')
     });
