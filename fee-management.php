@@ -693,10 +693,17 @@ $fee_categories_json = json_encode(array_values($fee_categories));
                         </div>
                         <div class="list-group list-group-flush flex-grow-1 overflow-auto" id="studentList">
                             <?php foreach ($all_students as $student): ?>
-                                <a href="#" class="list-group-item list-group-item-action student-list-item py-3 border-bottom" data-student-id="<?= $student['id'] ?>" data-name="<?= htmlspecialchars($student['full_name'], ENT_QUOTES) ?>" data-id-str="<?= htmlspecialchars($student['user_id_string'] ?? '', ENT_QUOTES) ?>" onclick="selectStudent(<?= htmlspecialchars(json_encode($student)) ?>, event)">
+                                <a href="#" class="list-group-item list-group-item-action student-list-item py-3 border-bottom" data-student-id="<?= $student['id'] ?>" data-name="<?= htmlspecialchars($student['full_name'], ENT_QUOTES) ?>" data-id-str="<?= htmlspecialchars($student['user_id_string'] ?? '', ENT_QUOTES) ?>" data-fname="<?= htmlspecialchars($student['father_name'] ?? '', ENT_QUOTES) ?>" onclick="selectStudent(<?= htmlspecialchars(json_encode($student)) ?>, event)">
                                     <div class="d-flex w-100 justify-content-between align-items-center">
-                                        <div><h6 class="mb-1 fw-bold text-dark"><?= htmlspecialchars($student['full_name'] ?? '') ?></h6><div class="small text-muted mb-0"><?= htmlspecialchars($student['user_id_string'] ?? 'N/A') ?></div></div>
-                                        <div class="text-end"><span class="program-badge mb-1"><?= htmlspecialchars($student['fee_category'] ?? 'Class 9') ?></span><div class="small text-muted">Class <?= htmlspecialchars($student['class_name'] ?? '') ?>-<?= htmlspecialchars($student['section_name'] ?? '') ?></div></div>
+                                        <div>
+                                            <h6 class="mb-1 fw-bold text-dark"><?= htmlspecialchars($student['full_name'] ?? '') ?></h6>
+                                            <div class="small text-muted mb-1"><?= htmlspecialchars($student['user_id_string'] ?? 'N/A') ?></div>
+                                            <div class="small text-secondary" style="font-size: 0.75rem;">S/D of: <span class="fw-semibold text-dark"><?= htmlspecialchars($student['father_name'] ?? 'N/A') ?></span></div>
+                                        </div>
+                                        <div class="text-end">
+                                            <span class="program-badge mb-1"><?= htmlspecialchars($student['fee_category'] ?? 'Class 9') ?></span>
+                                            <div class="small text-muted">Class <?= htmlspecialchars($student['class_name'] ?? '') ?>-<?= htmlspecialchars($student['section_name'] ?? '') ?></div>
+                                        </div>
                                     </div>
                                 </a>
                             <?php endforeach; ?>
@@ -964,7 +971,7 @@ $('#studentSearch').on('input', function() {
     const term = $(this).val().trim().toLowerCase();
     if (term === '') { $('.student-list-item').show(); return; }
     $('.student-list-item').each(function() {
-        const txt = String($(this).data('name') || '') + ' ' + String($(this).data('id-str') || '');
+        const txt = String($(this).data('name') || '') + ' ' + String($(this).data('id-str') || '') + ' ' + String($(this).data('fname') || '');
         $(this).toggle(txt.toLowerCase().includes(term));
     });
 });
