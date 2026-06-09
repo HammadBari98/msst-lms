@@ -175,119 +175,133 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if ($selected_student) {
             try {
-                $target_month_check = $_POST['target_month'] ?? date('Y-m');
+                $target_month = $_POST['target_month'] ?? date('Y-m');
+                $target_date = $target_month . '-01';
+                $multi_months = (isset($_POST['enable_multi_month']) && isset($_POST['multi_months'])) ? max(1, intval($_POST['multi_months'])) : 1;
+                
+                $pdo->beginTransaction();
+                
                 $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM fee_slips WHERE student_id = ? AND DATE_FORMAT(month_year, '%Y-%m') = ?");
-                $stmt_check->execute([$student_id, $target_month_check]);
+                $stmt_check->execute([$student_id, $target_month]);
                 
                 if ($stmt_check->fetchColumn() > 0) {
-                    $_SESSION['action_msg'] = '<div class="alert alert-warning alert-dismissible fade show"><i class="fas fa-exclamation-triangle me-2"></i>Fee slip already exists for ' . htmlspecialchars($selected_student['full_name']) . ' in this month.<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
-                    header('Location: ' . $_SERVER['PHP_SELF']); exit;
-                } else {
-                    ensureFeeSlipComponentsTable($pdo);
-                    $is_first_month = !hasPreviousSlips($pdo, $student_id);
-                    
-                    $comp_stmt = $pdo->prepare("SELECT * FROM fee_components WHERE is_active = 1 AND is_optional = 0" . ($is_first_month ? "" : " AND type = 'recurring'") . " ORDER BY type, name");
-                    $comp_stmt->execute();
-                    $components = $comp_stmt->fetchAll(PDO::FETCH_ASSOC);
-
-                    if (!empty($_POST['optional_components'])) {
-                        $opt_ids = array_map('intval', $_POST['optional_components']);
-                        $placeholders = implode(',', array_fill(0, count($opt_ids), '?'));
-                        $opt_stmt = $pdo->prepare("SELECT * FROM fee_components WHERE id IN ($placeholders) AND is_active = 1 AND is_optional = 1");
-                        $opt_stmt->execute($opt_ids);
-                        $components = array_merge($components, $opt_stmt->fetchAll(PDO::FETCH_ASSOC));
-                    }
-                    
-                    $tuition_amount = 4000;
-                    $student_cat = $selected_student['fee_category'] ?? 'Class 9';
-                    foreach($fee_categories as $cat) {
-                        if(strcasecmp($cat['name'], $student_cat) == 0) { $tuition_amount = $cat['tuition_amount']; break; }
-                    }
-                    
-                    $target_month = $_POST['target_month'] ?? date('Y-m');
-                    $target_date = $target_month . '-01'; 
-                    $installments = isset($_POST['installments']) ? max(1, intval($_POST['installments'])) : 1;
-                    $installment_days = isset($_POST['installment_days']) ? max(1, intval($_POST['installment_days'])) : 15;
-                    $installment_charge = isset($_POST['installment_charge']) ? floatval($_POST['installment_charge']) : 0;
-
-                    $total_fee = $tuition_amount;
-                    $component_data = [];
-
-                    $stmt_find_base = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Base Monthly Tuition' LIMIT 1");
-                    $stmt_find_base->execute();
-                    $base_tuition_comp_id = $stmt_find_base->fetchColumn();
-
-                    if (!$base_tuition_comp_id) {
-                        $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Base Monthly Tuition', 0, 'recurring', 'System managed base fee', 0, 0)");
-                        $base_tuition_comp_id = $pdo->lastInsertId();
-                    }
-
-                    $component_data[] = ['id' => $base_tuition_comp_id, 'name' => 'Base Monthly Tuition', 'amount' => $tuition_amount, 'type' => 'recurring'];
-
-                    foreach ($components as $comp) {
-                        $compNameLower = strtolower(trim($comp['name']));
-                        if ($comp['id'] == $base_tuition_comp_id || strpos($compNameLower, 'tuition') !== false || strpos($compNameLower, 'monthly') !== false) continue; 
-                        
-                        $total_fee += (float)$comp['amount'];
-                        $component_data[] = ['id' => $comp['id'], 'name' => $comp['name'], 'amount' => (float)$comp['amount'], 'type' => $comp['type']];
-                    }
-                    // --- NEW: LATE FEE ARREARS LOGIC ---
-                    $stmt_overdue = $pdo->prepare("SELECT COUNT(*) FROM fee_slips WHERE student_id = ? AND status = 'Pending' AND due_date < CURRENT_DATE");
-                    $stmt_overdue->execute([$student_id]);
-                    $overdue_count = $stmt_overdue->fetchColumn();
-
-                    if ($overdue_count > 0) {
-                        $late_fee_amount = $overdue_count * 500;
-                        $total_fee += $late_fee_amount;
-
-                        // Ensure Late Fee Arrears component exists in DB
-                        $stmt_lf = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Late Fee Arrears' LIMIT 1");
-                        $stmt_lf->execute();
-                        $lf_comp_id = $stmt_lf->fetchColumn();
-                        if (!$lf_comp_id) {
-                            $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Late Fee Arrears', 0, 'recurring', 'Late fee for previous overdue slips', 0, 1)");
-                            $lf_comp_id = $pdo->lastInsertId();
-                        }
-
-                        // Inject Late Fee into the Voucher
-                        $component_data[] = ['id' => $lf_comp_id, 'name' => 'Late Fee Arrears (' . $overdue_count . ' month(s))', 'amount' => $late_fee_amount, 'type' => 'recurring'];
-                    }
-                    $installment_amount = $total_fee / $installments;
-                    $base_slip_no = generateSlipNumber($selected_student['class_id'], $selected_student['id'], $target_month_check);
-                    
-                    $pdo->beginTransaction();
-                    $charge_comp_id = null;
-                    if ($installments > 1 && $installment_charge > 0) {
-                        $stmt_find = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Installment Charges' LIMIT 1");
-                        $stmt_find->execute();
-                        $charge_comp_id = $stmt_find->fetchColumn();
-                        if (!$charge_comp_id) {
-                            $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Installment Charges', 0, 'recurring', 'Processing fee for installments', 0, 1)");
-                            $charge_comp_id = $pdo->lastInsertId();
-                        }
-                    }
-                    
-                    for ($i = 0; $i < $installments; $i++) {
-                        $slip_no = $installments > 1 ? $base_slip_no . "-" . ($i + 1) : $base_slip_no;
-                        $days_to_add = $i * $installment_days;
-                        $slip_total = $installment_amount + ($installments > 1 ? $installment_charge : 0);
-                        
-                        $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date) VALUES (?, ?, ?, ?, DATE_ADD(DATE_ADD(?, INTERVAL 1 MONTH), INTERVAL ? DAY), 'Pending', ?, NOW())")->execute([$slip_no, $student_id, $target_date, $slip_total, $target_date, $days_to_add + 10, $student_cat]);
-                        
-                        $comp_insert = $pdo->prepare("INSERT INTO fee_slip_components (slip_no, component_id, component_name, amount, component_type) VALUES (?, ?, ?, ?, ?)");
-                        foreach ($component_data as $comp) {
-                            $comp_insert->execute([$slip_no, $comp['id'], $comp['name'], $comp['amount'] / $installments, $comp['type']]);
-                        }
-                        if ($installments > 1 && $installment_charge > 0 && $charge_comp_id) {
-                            $comp_insert->execute([$slip_no, $charge_comp_id, 'Installment Charges', $installment_charge, 'recurring']);
-                        }
-                    }
-                    
-                    $pdo->commit();
-                    $pdo->prepare("UPDATE student_details SET one_time_fees_cleared = 1 WHERE user_id = ?")->execute([$student_id]);
-                    $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible fade show"><i class="fas fa-check-circle me-2"></i>Fee slip generated for ' . htmlspecialchars($selected_student['full_name']) . '!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+                    $_SESSION['action_msg'] = '<div class="alert alert-warning alert-dismissible fade show"><i class="fas fa-exclamation-triangle me-2"></i>A fee slip already exists for ' . date('M Y', strtotime($target_date)) . '.<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
                     header('Location: ' . $_SERVER['PHP_SELF']); exit;
                 }
+                
+                ensureFeeSlipComponentsTable($pdo);
+                $is_first_month = !hasPreviousSlips($pdo, $student_id);
+                
+                $comp_stmt = $pdo->prepare("SELECT * FROM fee_components WHERE is_active = 1 AND is_optional = 0" . ($is_first_month ? "" : " AND type = 'recurring'") . " ORDER BY type, name");
+                $comp_stmt->execute();
+                $components = $comp_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                if (!empty($_POST['optional_components'])) {
+                    $opt_ids = array_map('intval', $_POST['optional_components']);
+                    $placeholders = implode(',', array_fill(0, count($opt_ids), '?'));
+                    $opt_stmt = $pdo->prepare("SELECT * FROM fee_components WHERE id IN ($placeholders) AND is_active = 1 AND is_optional = 1");
+                    $opt_stmt->execute($opt_ids);
+                    $components = array_merge($components, $opt_stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
+                
+                $tuition_amount = 4000;
+                $student_cat = $selected_student['fee_category'] ?? 'Class 9';
+                foreach($fee_categories as $cat) {
+                    if(strcasecmp($cat['name'], $student_cat) == 0) { $tuition_amount = $cat['tuition_amount']; break; }
+                }
+                
+                $installments = isset($_POST['installments']) ? max(1, intval($_POST['installments'])) : 1;
+                $installment_days = isset($_POST['installment_days']) ? max(1, intval($_POST['installment_days'])) : 15;
+                $installment_charge = isset($_POST['installment_charge']) ? floatval($_POST['installment_charge']) : 0;
+
+                $total_fee = 0;
+                $component_data = [];
+
+                $stmt_find_base = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Base Monthly Tuition' LIMIT 1");
+                $stmt_find_base->execute();
+                $base_tuition_comp_id = $stmt_find_base->fetchColumn();
+
+                if (!$base_tuition_comp_id) {
+                    $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Base Monthly Tuition', 0, 'recurring', 'System managed base fee', 0, 0)");
+                    $base_tuition_comp_id = $pdo->lastInsertId();
+                }
+
+                // MULTIPLY TUITION BY NUMBER OF MONTHS
+                $calc_tuition = $tuition_amount * $multi_months;
+                $tuition_label = 'Base Monthly Tuition' . ($multi_months > 1 ? " ($multi_months Months)" : "");
+                $total_fee += $calc_tuition;
+                $component_data[] = ['id' => $base_tuition_comp_id, 'name' => $tuition_label, 'amount' => $calc_tuition, 'type' => 'recurring'];
+
+                foreach ($components as $comp) {
+                    $compNameLower = strtolower(trim($comp['name']));
+                    if ($comp['id'] == $base_tuition_comp_id || strpos($compNameLower, 'tuition') !== false || strpos($compNameLower, 'monthly') !== false) continue; 
+                    
+                    // MULTIPLY OTHER RECURRING FEES BY NUMBER OF MONTHS
+                    $multiplier = ($comp['type'] === 'recurring') ? $multi_months : 1;
+                    $calc_amount = (float)$comp['amount'] * $multiplier;
+                    $comp_label = $comp['name'] . (($multiplier > 1) ? " ($multi_months Months)" : "");
+
+                    $total_fee += $calc_amount;
+                    $component_data[] = ['id' => $comp['id'], 'name' => $comp_label, 'amount' => $calc_amount, 'type' => $comp['type']];
+                }
+                
+                // --- LATE FEE ARREARS LOGIC (Charged Only Once) ---
+                $stmt_overdue = $pdo->prepare("SELECT COUNT(*) FROM fee_slips WHERE student_id = ? AND status = 'Pending' AND due_date < CURRENT_DATE");
+                $stmt_overdue->execute([$student_id]);
+                $overdue_count = $stmt_overdue->fetchColumn();
+
+                if ($overdue_count > 0) {
+                    $late_fee_amount = $overdue_count * 500;
+                    $total_fee += $late_fee_amount;
+
+                    $stmt_lf = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Late Fee Arrears' LIMIT 1");
+                    $stmt_lf->execute();
+                    $lf_comp_id = $stmt_lf->fetchColumn();
+                    if (!$lf_comp_id) {
+                        $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Late Fee Arrears', 0, 'recurring', 'Late fee for previous overdue slips', 0, 1)");
+                        $lf_comp_id = $pdo->lastInsertId();
+                    }
+                    $component_data[] = ['id' => $lf_comp_id, 'name' => 'Late Fee Arrears (' . $overdue_count . ' month(s))', 'amount' => $late_fee_amount, 'type' => 'recurring'];
+                }
+                
+                $installment_amount = $total_fee / $installments;
+                $base_slip_no = generateSlipNumber($selected_student['class_id'], $selected_student['id'], $target_month);
+                
+                $charge_comp_id = null;
+                if ($installments > 1 && $installment_charge > 0) {
+                    $stmt_find = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Installment Charges' LIMIT 1");
+                    $stmt_find->execute();
+                    $charge_comp_id = $stmt_find->fetchColumn();
+                    if (!$charge_comp_id) {
+                        $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Installment Charges', 0, 'recurring', 'Processing fee for installments', 0, 1)");
+                        $charge_comp_id = $pdo->lastInsertId();
+                    }
+                }
+                
+                for ($i = 0; $i < $installments; $i++) {
+                    $slip_no = $installments > 1 ? $base_slip_no . "-" . ($i + 1) : $base_slip_no;
+                    $days_to_add = $i * $installment_days;
+                    $slip_total = $installment_amount + ($installments > 1 ? $installment_charge : 0);
+                    
+                    // Calculates Due Date as the 10th of the NEXT month from the exact moment of creation
+                    $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date) VALUES (?, ?, ?, ?, DATE_ADD(DATE_FORMAT(DATE_ADD(NOW(), INTERVAL 1 MONTH), '%Y-%m-10'), INTERVAL ? DAY), 'Pending', ?, NOW())")->execute([$slip_no, $student_id, $target_date, $slip_total, $days_to_add, $student_cat]);
+                    
+                    $comp_insert = $pdo->prepare("INSERT INTO fee_slip_components (slip_no, component_id, component_name, amount, component_type) VALUES (?, ?, ?, ?, ?)");
+                    foreach ($component_data as $comp) {
+                        $comp_insert->execute([$slip_no, $comp['id'], $comp['name'], $comp['amount'] / $installments, $comp['type']]);
+                    }
+                    if ($installments > 1 && $installment_charge > 0 && $charge_comp_id) {
+                        $comp_insert->execute([$slip_no, $charge_comp_id, 'Installment Charges', $installment_charge, 'recurring']);
+                    }
+                }
+                
+                $pdo->prepare("UPDATE student_details SET one_time_fees_cleared = 1 WHERE user_id = ?")->execute([$student_id]);
+                $pdo->commit();
+                
+                $month_label = $multi_months > 1 ? "$multi_months Months Combined" : "1 Month";
+                $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible fade show"><i class="fas fa-check-circle me-2"></i>Generated SINGLE fee slip (' . $month_label . ') for ' . htmlspecialchars($selected_student['full_name']) . '.<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+                header('Location: ' . $_SERVER['PHP_SELF']); exit;
+                
             } catch (Exception $e) {
                 if ($pdo->inTransaction()) { $pdo->rollBack(); }
                 $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible fade show"><i class="fas fa-times-circle me-2"></i>Error: ' . htmlspecialchars($e->getMessage()) . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
@@ -295,7 +309,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
-    
     // 2. GENERATE FEE SLIPS FOR ENTIRE CLASS
     if (isset($_POST['generate_slips_for_class'])) {
         $class_id = $_POST['class_id'];
@@ -380,7 +393,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 for ($i = 0; $i < $installments; $i++) {
                     $slip_no = $installments > 1 ? $base_slip_no . "-" . ($i + 1) : $base_slip_no;
                     $slip_total = $installment_amount + ($installments > 1 ? $installment_charge : 0);
-                    $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date) VALUES (?, ?, ?, ?, DATE_ADD(DATE_ADD(?, INTERVAL 1 MONTH), INTERVAL ? DAY), 'Pending', ?, NOW())")->execute([$slip_no, $student['id'], $target_date, $slip_total, $target_date, ($i * $installment_days) + 10, $student_cat]);
+                    // Calculates Due Date as the 10th of the NEXT month from the exact moment of creation
+                    $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date) VALUES (?, ?, ?, ?, DATE_ADD(DATE_FORMAT(DATE_ADD(NOW(), INTERVAL 1 MONTH), '%Y-%m-10'), INTERVAL ? DAY), 'Pending', ?, NOW())")->execute([$slip_no, $student['id'], $target_date, $slip_total, ($i * $installment_days), $student_cat]);
                     
                     $comp_insert = $pdo->prepare("INSERT INTO fee_slip_components (slip_no, component_id, component_name, amount, component_type) VALUES (?, ?, ?, ?, ?)");
                     foreach ($component_data as $comp) { $comp_insert->execute([$slip_no, $comp['id'], $comp['name'], $comp['amount'] / $installments, $comp['type']]); }
@@ -718,8 +732,15 @@ $fee_categories_json = json_encode(array_values($fee_categories));
                             <form method="post" id="generateSlipForm">
                                 <input type="hidden" name="generate_slip_for_student" value="1"><input type="hidden" name="student_id" id="selectedStudentId">
                                 <div class="row g-2 mb-3 px-3 mt-2">
-                                    <div class="col-md-12"><label class="form-label small fw-bold">Target Month</label><input type="month" class="form-control" name="target_month" value="<?= date('Y-m') ?>" required></div>
-                                    <div class="col-md-12 mt-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="enableSingleInstallments"><label class="form-check-label fw-bold small text-primary" for="enableSingleInstallments">Enable Installment Plan</label></div></div>
+                                    <div class="col-md-12"><label class="form-label small fw-bold">Starting Target Month</label><input type="month" class="form-control" name="target_month" value="<?= date('Y-m') ?>" required></div>
+                                    
+                                    <div class="col-md-6 mt-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="enableMultiMonth" name="enable_multi_month"><label class="form-check-label fw-bold small text-success" for="enableMultiMonth">Multi-Month Generation</label></div></div>
+                                    <div class="col-md-6 mt-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="enableSingleInstallments"><label class="form-check-label fw-bold small text-primary" for="enableSingleInstallments">Enable Installments</label></div></div>
+                                </div>
+                                
+                                <div class="row g-2 mb-3 px-3 multi-month-fields" style="display: none;">
+                                    <div class="col-md-12"><label class="form-label small fw-bold text-success">Number of Months to Combine</label><input type="number" class="form-control border-success bg-success bg-opacity-10 fw-bold" name="multi_months" id="multiMonthsInput" value="1" min="1" max="12"></div>
+                                    <div class="col-md-12"><small class="text-muted"><i class="fas fa-info-circle me-1"></i>This combines the fees for all selected months into a <strong>SINGLE</strong> fee voucher.</small></div>
                                 </div>
                                 <div class="row g-2 mb-3 px-3 installment-fields-single" style="display: none;">
                                     <div class="col-md-4"><label class="form-label small fw-bold text-primary">No. of Installments</label><input type="number" class="form-control border-primary" name="installments" id="singleInstallments" value="1" min="1" max="4"></div>
@@ -1004,26 +1025,42 @@ function calculateFeeForStudent(student) {
     const catData = feeCategories.find(c => c.name.toLowerCase() === studentCatName.toLowerCase());
     if (catData) tuitionAmount = parseFloat(catData.tuition_amount);
     const isFirstMonth = (student.is_first_month == 1);
-    let componentsHtml = `<div class="mb-2 p-2 border-bottom d-flex justify-content-between bg-primary bg-opacity-10 rounded"><span>Base Monthly Fee (${studentCatName})</span><strong class="text-primary">PKR ${tuitionAmount.toFixed(2)}</strong></div>`;
-    let mandatoryTotal = tuitionAmount;
+    
+    // --- MULTI-MONTH UI LOGIC ---
+    const isMulti = $('#enableMultiMonth').length > 0 && $('#enableMultiMonth').is(':checked');
+    const multiMonths = isMulti ? (parseInt($('#multiMonthsInput').val()) || 1) : 1;
+    
+    const calcTuition = tuitionAmount * multiMonths;
+    const tuitionLabel = `Base Monthly Fee (${studentCatName})` + (multiMonths > 1 ? ` <span class="badge bg-success ms-1">${multiMonths} Months</span>` : '');
+    
+    let componentsHtml = `<div class="mb-2 p-2 border-bottom d-flex justify-content-between bg-primary bg-opacity-10 rounded"><span>${tuitionLabel}</span><strong class="text-primary">PKR ${calcTuition.toFixed(2)}</strong></div>`;
+    let mandatoryTotal = calcTuition;
 
-// --- LATE FEE ARREARS UI ADDITION ---
+    // --- LATE FEE ARREARS UI ADDITION (Fixed: Never multiplied) ---
     const overdueCount = parseInt(student.overdue_count) || 0;
     if (overdueCount > 0) {
         const lateFee = overdueCount * 500;
         mandatoryTotal += lateFee;
         componentsHtml += `<div class="mb-2 p-2 border-bottom d-flex justify-content-between bg-danger bg-opacity-10 rounded"><span><i class="fas fa-exclamation-circle text-danger me-2"></i> Late Fee Arrears (${overdueCount} month(s))</span><strong class="text-danger">PKR ${lateFee.toFixed(2)}</strong></div>`;
     }
+    
     if (activeComponents && activeComponents.length > 0) {
         activeComponents.forEach(comp => {
             const lower = comp.name.toLowerCase();
             if (lower.includes('installment charge') || lower.includes('tuition') || lower.includes('monthly')) return; 
+            
             let amt = parseFloat(comp.amount);
+            
             if (comp.is_optional == 1) {
                 componentsHtml += `<div class="mb-2 form-check border rounded p-2 bg-white d-flex"><input class="form-check-input optional-fee-cb ms-1" type="checkbox" name="optional_components[]" value="${comp.id}" data-amount="${amt}" id="opt${comp.id}"><label class="form-check-label w-100 ms-2" for="opt${comp.id}"><span class="badge bg-warning text-dark me-2">Optional</span>${comp.name}: <strong class="text-success">PKR ${amt.toFixed(2)}</strong></label></div>`;
             } else if (isFirstMonth || comp.type === 'recurring') {
-                mandatoryTotal += amt;
-                componentsHtml += `<div class="mb-2 p-2 border-bottom d-flex justify-content-between"><span><span class="badge bg-info me-2">${comp.type}</span> ${comp.name}</span><strong>PKR ${amt.toFixed(2)}</strong></div>`;
+                // Multiply recurring fees by the selected months
+                let multiplier = (comp.type === 'recurring') ? multiMonths : 1;
+                let calcAmt = amt * multiplier;
+                mandatoryTotal += calcAmt;
+                
+                let monthBadge = (multiplier > 1) ? ` <span class="badge bg-success ms-1">${multiplier} Months</span>` : '';
+                componentsHtml += `<div class="mb-2 p-2 border-bottom d-flex justify-content-between"><span><span class="badge bg-info me-2">${comp.type}</span> ${comp.name}${monthBadge}</span><strong>PKR ${calcAmt.toFixed(2)}</strong></div>`;
             }
         });
     }
@@ -1191,7 +1228,6 @@ function viewDetailedVoucher(slipNo) {
         }, error: () => $('#detailedVoucherContent').html('<div class="alert alert-danger m-3">Error loading details. Ensure ajax/get_fee_voucher_details.php is correctly created.</div>')
     });
 }
-
 function printVoucher() {
     const parentCopy = document.getElementById('parent-copy').innerHTML;
     const hostelCopy = document.getElementById('hostel-copy').innerHTML;
@@ -1200,13 +1236,18 @@ function printVoucher() {
     printWindow.document.write(`
     <html><head><title>Fee Slip - MSST</title>
     <style>
-        @page { size: A4 landscape; margin: 4mm; }
+        /* Increased margins to 8mm to protect borders from hardware printer clipping */
+        @page { size: A4 landscape; margin: 8mm; } 
         body { margin: 0; padding: 0; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff; }
-        .voucher-page { display: flex; flex-direction: row; justify-content: space-between; width: 100%; height: 195mm; box-sizing: border-box; }
-        .voucher-col { width: 32%; height: 100%; box-sizing: border-box; }
         
-        /* MODERN PRINT CSS */
-        .modern-voucher { background: #ffffff; border: 1px solid #000; border-radius: 8px; overflow: hidden; height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
+        /* Reduced height to 185mm to prevent bottom border cutoff */
+        .voucher-page { display: flex; flex-direction: row; justify-content: space-between; width: 100%; height: 185mm; box-sizing: border-box; }
+        
+        /* Added padding so the border sits inside the container, not on the exact edge */
+        .voucher-col { width: 32.5%; height: 100%; box-sizing: border-box; padding: 3px; } 
+        
+        /* MODERN PRINT CSS (Thicker 1.5px border for better print visibility) */
+        .modern-voucher { background: #ffffff; border: 1.5px solid #000; border-radius: 8px; overflow: hidden; height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
         .mv-header { display: flex; align-items: center; padding: 8px 10px; border-bottom: 2px solid #000; background: #f8f9fa !important; gap: 8px; }
         .mv-logo { width: 38px; height: 38px; object-fit: contain; flex-shrink: 0; }
         .mv-school-text { flex: 1; line-height: 1.1; min-width: 0; }
@@ -1312,6 +1353,18 @@ function applyScholarshipModal(slipNo, studentName, currentPercent) {
     $('#scholarshipSlipNo').val(slipNo); $('#scholarshipStudentName').text(studentName); $('#scholarshipPercent').val(currentPercent);
     new bootstrap.Modal(document.getElementById('applyScholarshipModal')).show();
 }
+$('#enableMultiMonth').on('change', function() {
+    if ($(this).is(':checked')) { 
+        $('.multi-month-fields').slideDown(); 
+        $('#multiMonthsInput').val(2); 
+        // UX feature: Disable installments while generating multi-months to prevent confusion
+        $('#enableSingleInstallments').prop('checked', false).trigger('change').prop('disabled', true);
+    } else { 
+        $('.multi-month-fields').slideUp(); 
+        $('#multiMonthsInput').val(1); 
+        $('#enableSingleInstallments').prop('disabled', false);
+    }
+});
 
 $('#enableSingleInstallments').on('change', function() {
     if ($(this).is(':checked')) { $('.installment-fields-single').slideDown(); $('#singleInstallments').val(1); const c = activeComponents.find(x => x.name.toLowerCase().includes('installment charge')); if(c) $('input[name="installment_charge"]').val(parseFloat(c.amount).toFixed(2)); } else { $('.installment-fields-single').slideUp(); $('#singleInstallments').val(1); }
@@ -1319,7 +1372,7 @@ $('#enableSingleInstallments').on('change', function() {
 $('#enableClassInstallments').on('change', function() {
     if ($(this).is(':checked')) { $('.installment-fields-class').slideDown(); $('#classInstallments').val(1); const c = activeComponents.find(x => x.name.toLowerCase().includes('installment charge')); if(c) $('#generateClassSlipsModal input[name="installment_charge"]').val(parseFloat(c.amount).toFixed(2)); } else { $('.installment-fields-class').slideUp(); $('#classInstallments').val(1); }
 });
-$('#singleInstallments, input[name="installment_charge"]').on('change keyup', () => { if (selectedStudent) calculateFeeForStudent(selectedStudent); });
+$('#singleInstallments, input[name="installment_charge"], #multiMonthsInput, #enableMultiMonth').on('change keyup', () => { if (selectedStudent) calculateFeeForStudent(selectedStudent); });
 
 function editDatesModal(slipNo, studentName, issueDate, dueDate) {
     document.getElementById('editDatesSlipNo').value = slipNo;
