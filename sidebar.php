@@ -14,6 +14,7 @@
         <li><a href="fee-management.php"><i class="fas fa-file-invoice-dollar fa-fw me-2"></i> <span>Fee Management</span></a></li>
         <li><a href="class-management.php"><i class="fas fa-chalkboard"></i> <span>Classes & Sections</span></a></li>
         <li><a href="view-scores.php"><i class="fas fa-chart-line fa-fw me-2"></i> <span>View Scores</span></a></li>
+        <li><a href="scholarship-list.php"><i class="fas fa-chart-line fa-fw me-2"></i> <span>Scholarship List</span></a></li>
         <li><a href="student-report.php"><i class="fas fa-chart-line fa-fw me-2"></i> <span>Student Report</span></a></li>
         <li><a href="exam-management.php"><i class="fas fa-pen-alt fa-fw me-2"></i> <span>Exam Management</span></a></li>
         <li><a href="attendance-management.php"><i class="fas fa-user-check fa-fw me-2"></i> <span>Attendance Management</span></a></li>

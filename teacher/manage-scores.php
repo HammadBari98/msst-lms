@@ -186,40 +186,36 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php if (count($assessments) > 0): ?>
-                                        <?php foreach ($assessments as $asm): ?>
-                                        <tr>
-                                            <td><?= date('d M Y', strtotime($asm['assessment_date'])) ?></td>
-                                            <td>
-                                                <strong><?= htmlspecialchars($asm['title']) ?></strong><br>
-                                                <small class="text-muted"><?= htmlspecialchars($asm['subject_name']) ?> (Max: <?= $asm['total_marks'] ?>)</small>
-                                            </td>
-                                            <td>Class <?= htmlspecialchars($asm['class_name']) ?></td>
-                                            <td><span class="badge bg-info"><?= $asm['assessment_type'] ?></span></td>
-                                            <td>
-                                                <div class="d-flex align-items-center">
-                                                    <span class="me-2"><?= $asm['graded_count'] ?> / <?= $asm['total_students'] ?></span>
-                                                    <div class="progress flex-grow-1" style="height: 8px;">
-                                                        <?php $pct = $asm['total_students'] > 0 ? ($asm['graded_count'] / $asm['total_students']) * 100 : 0; ?>
-                                                        <div class="progress-bar bg-success" style="width: <?= $pct ?>%"></div>
-                                                    </div>
+                                    <?php foreach ($assessments as $asm): ?>
+                                    <tr>
+                                        <td><?= date('d M Y', strtotime($asm['assessment_date'])) ?></td>
+                                        <td>
+                                            <strong><?= htmlspecialchars($asm['title']) ?></strong><br>
+                                            <small class="text-muted"><?= htmlspecialchars($asm['subject_name']) ?> (Max: <?= $asm['total_marks'] ?>)</small>
+                                        </td>
+                                        <td>Class <?= htmlspecialchars($asm['class_name']) ?></td>
+                                        <td><span class="badge bg-info"><?= $asm['assessment_type'] ?></span></td>
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <span class="me-2"><?= $asm['graded_count'] ?> / <?= $asm['total_students'] ?></span>
+                                                <div class="progress flex-grow-1" style="height: 8px;">
+                                                    <?php $pct = $asm['total_students'] > 0 ? ($asm['graded_count'] / $asm['total_students']) * 100 : 0; ?>
+                                                    <div class="progress-bar bg-success" style="width: <?= $pct ?>%"></div>
                                                 </div>
-                                            </td>
-                                            <td>
-                                                <button class="btn btn-sm btn-success mb-1" onclick="gradeAssessment(<?= $asm['id'] ?>, <?= $asm['class_id'] ?>, '<?= htmlspecialchars($asm['title'], ENT_QUOTES) ?>', <?= $asm['total_marks'] ?>)">
-                                                    <i class="fas fa-edit"></i> Grade
-                                                </button>
-                                                <form method="post" class="d-inline" onsubmit="return confirm('Delete this assessment and ALL associated scores?');">
-                                                    <input type="hidden" name="action" value="delete_assessment">
-                                                    <input type="hidden" name="assessment_id" value="<?= $asm['id'] ?>">
-                                                    <button type="submit" class="btn btn-sm btn-danger mb-1"><i class="fas fa-trash"></i></button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                        <?php endforeach; ?>
-                                    <?php else: ?>
-                                        <tr><td colspan="6" class="text-center text-muted">No assessments created yet.</td></tr>
-                                    <?php endif; ?>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-success mb-1" onclick="gradeAssessment(<?= $asm['id'] ?>, <?= $asm['class_id'] ?>, '<?= htmlspecialchars($asm['title'], ENT_QUOTES) ?>', <?= $asm['total_marks'] ?>)">
+                                                <i class="fas fa-edit"></i> Grade
+                                            </button>
+                                            <form method="post" class="d-inline" onsubmit="return confirm('Delete this assessment and ALL associated scores?');">
+                                                <input type="hidden" name="action" value="delete_assessment">
+                                                <input type="hidden" name="assessment_id" value="<?= $asm['id'] ?>">
+                                                <button type="submit" class="btn btn-sm btn-danger mb-1"><i class="fas fa-trash"></i></button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
