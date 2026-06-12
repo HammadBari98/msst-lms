@@ -39,6 +39,42 @@ try {
     $stmt->execute();
     $scholarship_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // --- NEW: Prepare Data for Print Filter ---
+    $unique_months = [];
+    $js_records = [];
+    foreach ($scholarship_records as $rec) {
+        // Build Unique Month Dropdown Options
+        $m_val = date('Y-m', strtotime($rec['month_year']));
+        $m_label = date('F Y', strtotime($rec['month_year']));
+        $unique_months[$m_val] = $m_label;
+        
+        // Calculate savings for the Javascript Print Engine
+        $percent = 0;
+        if (preg_match('/\((\d+(?:\.\d+)?)% Scholarship\)/', $rec['component_name'], $matches)) {
+            $percent = floatval($matches[1]);
+        }
+        $original = floatval($rec['original_tuition']);
+        $discounted = floatval($rec['discounted_tuition']);
+        
+        $saved_amount = 0;
+        if ($percent > 0) {
+            $original_slip_portion = $discounted / ((100 - $percent) / 100);
+            $saved_amount = $original_slip_portion - $discounted;
+        }
+
+        $js_records[] = [
+            'month_val' => $m_val,
+            'month_label' => date('M Y', strtotime($rec['month_year'])),
+            'slip_no' => $rec['slip_no'],
+            'student_name' => $rec['full_name'],
+            'father_name' => $rec['father_name'] ?? 'N/A',
+            'class_sec' => 'Class ' . ($rec['class_name'] ?? '') . '-' . ($rec['section_name'] ?? ''),
+            'percent' => $percent,
+            'saved' => number_format($saved_amount, 2)
+        ];
+    }
+    // ----------------------------------------
+
 } catch (PDOException $e) {
     die("Database Error: " . $e->getMessage());
 }
@@ -72,12 +108,17 @@ try {
         <div class="container-fluid">
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
                 <h1 class="h3 mb-0 text-gray-800">Scholarship Awardees</h1>
-                <a href="fee-management.php" class="btn btn-primary shadow-sm">
-                    <i class="fas fa-arrow-left fa-sm text-white-50 me-1"></i> Back to Fees
-                </a>
+                <div>
+                    <button class="btn btn-info shadow-sm text-white me-2" data-bs-toggle="modal" data-bs-target="#printReportModal">
+                        <i class="fas fa-print fa-sm text-white-50 me-1"></i> Print Report
+                    </button>
+                    <a href="fee-management.php" class="btn btn-primary shadow-sm">
+                        <i class="fas fa-arrow-left fa-sm text-white-50 me-1"></i> Back to Fees
+                    </a>
+                </div>
             </div>
 
-            <div class="row mb-4">
+            <!-- <div class="row mb-4">
                 <div class="col-xl-3 col-md-6 mb-4">
                     <div class="card border-left-warning shadow h-100 py-2">
                         <div class="card-body">
@@ -91,7 +132,7 @@ try {
                         </div>
                     </div>
                 </div>
-            </div>
+            </div> -->
 
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
@@ -161,6 +202,29 @@ try {
             
         </div>
     </div>
+    <div class="modal fade" id="printReportModal" tabindex="-1">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-info text-white border-0 py-3">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-print me-2"></i>Print Report</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <label class="form-label fw-bold text-dark small">Select Fee Month</label>
+                    <select class="form-select border-info fw-bold" id="printMonthSelect">
+                        <option value="ALL">All Months (Complete List)</option>
+                        <?php foreach($unique_months as $val => $label): ?>
+                            <option value="<?= $val ?>"><?= $label ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="modal-footer bg-white border-top">
+                    <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-info text-white fw-bold px-4 shadow-sm" onclick="executePrint()">Generate Print</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <footer class="footer"><div class="container-fluid"><p class="text-center mb-0">© <?= date('Y') ?> Muhaddisa School of Science and Technology.</p></div></footer>
 </div>
@@ -192,6 +256,94 @@ try {
                 mainContent.classList.toggle('show-sidebar');
             }
         });
+    }
+
+    // Pass PHP data to Javascript
+    const scholarshipData = <?= json_encode($js_records) ?>;
+
+    function executePrint() {
+        const selectedMonth = document.getElementById('printMonthSelect').value;
+        let filteredData = scholarshipData;
+        let reportTitle = "Scholarship Awardees Report (All Months)";
+        
+        // Filter if a specific month is selected
+        if (selectedMonth !== "ALL") {
+            filteredData = scholarshipData.filter(r => r.month_val === selectedMonth);
+            const selectEl = document.getElementById('printMonthSelect');
+            const monthLabel = selectEl.options[selectEl.selectedIndex].text;
+            reportTitle = `Scholarship Awardees Report (${monthLabel})`;
+        }
+
+        let rows = '';
+        let totalSaved = 0;
+        
+        if (filteredData.length === 0) {
+            rows = `<tr><td colspan="7" style="text-align:center; padding: 20px;">No scholarship records found for the selected timeframe.</td></tr>`;
+        } else {
+            filteredData.forEach((r, idx) => {
+                rows += `<tr>
+                    <td style="text-align:center;">${idx + 1}</td>
+                    <td>${r.month_label}</td>
+                    <td>${r.slip_no}</td>
+                    <td><strong style="font-size: 13px;">${r.student_name}</strong><br><span style="color:#555; font-size: 10px;">S/D of: ${r.father_name}</span></td>
+                    <td>${r.class_sec}</td>
+                    <td style="text-align:center; font-weight:bold;">${r.percent}% OFF</td>
+                    <td style="text-align:right; font-weight:bold;">PKR ${r.saved}</td>
+                </tr>`;
+                totalSaved += parseFloat(r.saved.replace(/,/g, ''));
+            });
+
+            // Add the Grand Total row at the bottom
+            rows += `<tr>
+                <td colspan="6" style="text-align:right; font-size: 14px;"><strong>Total Scholarships Granted:</strong></td>
+                <td style="text-align:right; font-size: 14px;"><strong>PKR ${totalSaved.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></td>
+            </tr>`;
+        }
+
+        // Generate the Print Window Document
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+        <html><head><title>${reportTitle} - MSST</title>
+        <style>
+            body { font-family: 'Arial', sans-serif; padding: 20px; color: #222; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #333; padding-bottom: 15px; }
+            .header h2 { margin: 0 0 5px 0; text-transform: uppercase; font-size: 22px; font-weight: 900; }
+            .header h3 { margin: 0 0 5px 0; font-size: 16px; color: #555; }
+            .header p { margin: 0; font-size: 12px; color: #777; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #444; padding: 8px; text-align: left; }
+            th { background-color: #f1f3f5; color: #000; text-transform: uppercase; font-size: 11px; }
+            tr:nth-child(even) { background-color: #fafafa; }
+            @media print { @page { margin: 10mm; } body { padding: 0; } }
+        </style>
+        </head><body>
+            <div class="header">
+                <h2>Muhaddisa School of Science & Technology</h2>
+                <h3>${reportTitle}</h3>
+                <p>Printed on: ${new Date().toLocaleDateString('en-GB')}</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="text-align:center; width: 30px;">#</th>
+                        <th style="width: 80px;">Fee Month</th>
+                        <th style="width: 120px;">Slip No</th>
+                        <th>Student Details</th>
+                        <th>Class & Section</th>
+                        <th style="text-align:center;">Discount</th>
+                        <th style="text-align:right;">Amount Saved</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </body></html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+        
+        // Close Modal after clicking print
+        bootstrap.Modal.getInstance(document.getElementById('printReportModal')).hide();
     }
 </script>
 </body>
