@@ -18,6 +18,7 @@
         <li><a href="student-report.php"><i class="fas fa-chart-line fa-fw me-2"></i> <span>Student Report</span></a></li>
         <li><a href="exam-management.php"><i class="fas fa-pen-alt fa-fw me-2"></i> <span>Exam Management</span></a></li>
         <li><a href="attendance-management.php"><i class="fas fa-user-check fa-fw me-2"></i> <span>Attendance Management</span></a></li>
+        <li><a href="attendance-report.php"><i class="fas fa-user-check fa-fw me-2"></i> <span>Attendance Report</span></a></li>
         <li><a href="content-management.php"><i class="fas fa-folder-open fa-fw me-2"></i> <span>Content Management</span></a></li>
         <li><a href="notice-board.php"><i class="fas fa-bullhorn fa-fw me-2"></i> <span>Notice Board</span></a></li>
         <li><a href="leads.php"><i class="fas fa-user"></i> <span>College Leads</span></a></li>

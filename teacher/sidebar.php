@@ -186,7 +186,9 @@
     <!-- <li><a href="assignments.php"><i class="fas fa-chart-bar"></i> <span>Assignments</span></a></li> -->
     <!-- <li><a href="grades.php"><i class="fas fa-receipt"></i> <span>Grades</span></a></li> -->
     <li><a href="manage-scores.php"><i class="fas fa-receipt"></i> <span>Manage Scores</span></a></li>
-    <li><a href="attendance.php"><i class="fas fa-calendar-check"></i> <span>Attendance</span></a></li>
+    <li><a href="attendance-management.php"><i class="fas fa-calendar-alt"></i> <span>Attendance Management</span></a></li>
+    <li><a href="attendance-report.php"><i class="fas fa-calendar-check"></i> <span>Attendance Report</span></a></li>
+    
     <li><a href="notice.php"><i class="fas fa-bullhorn"></i> <span>Notices</span></a></li>
     <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>
     <li><a href="performance-reports.php"><i class="fas fa-life-ring"></i> <span>Performance Reports</span></a></li>
