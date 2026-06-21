@@ -193,14 +193,14 @@
     <li><a href="dashboard.php" class=""><i class="fas fa-tachometer-alt"></i> <span>Dashboard</span></a></li>
     <li><a href="profile.php"><i class="fas fa-user"></i> <span>Profile</span></a></li>
     <li><a href="enrolled_subjects.php"><i class="fas fa-book"></i> <span>Courses</span></a></li>
-    <li><a href="assignments.php"><i class="fas fa-clipboard-list"></i> <span>Assignments</span></a></li>
-    <li><a href="grades.php"><i class="fas fa-chart-bar"></i> <span>Grades</span></a></li>
+    <!-- <li><a href="assignments.php"><i class="fas fa-clipboard-list"></i> <span>Assignments</span></a></li>
+    <li><a href="grades.php"><i class="fas fa-chart-bar"></i> <span>Grades</span></a></li> -->
     <li><a href="my-scores.php"><i class="fas fa-chart-bar"></i> <span>My Scores</span></a></li>
     <li><a href="attendance.php"><i class="fas fa-calendar-check"></i> <span>Attendance</span></a></li>
     <li><a href="fee-detail.php"><i class="fas fa-receipt"></i> <span>Fee Detail</span></a></li>
     <li><a href="notice.php"><i class="fas fa-bullhorn"></i> <span>Notices</span></a></li>
-    <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>
-    <li><a href="support.php"><i class="fas fa-life-ring"></i> <span>Support</span></a></li>
+    <!-- <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li> -->
+    <!-- <li><a href="support.php"><i class="fas fa-life-ring"></i> <span>Support</span></a></li> -->
   
     <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>
 </ul>

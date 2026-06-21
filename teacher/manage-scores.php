@@ -247,7 +247,9 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Subject</label>
-                                <input type="text" name="subject_name" class="form-control" placeholder="e.g., Mathematics" required>
+                                <select name="subject_name" id="dynamicSubjectSelect" class="form-select" required>
+                                    <option value="">First select a class...</option>
+                                </select>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Type</label>
@@ -411,6 +413,48 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                 $('#studentGradingList').html('<tr><td colspan="3" class="text-danger text-center py-4">Failed to load students. Ensure AJAX endpoint exists.</td></tr>');
             });
         }
+
+        // Dynamic Subject Dropdown
+        $('select[name="class_id"]').on('change', function() {
+            var selectedText = $(this).find('option:selected').text();
+            var subjectSelect = $('#dynamicSubjectSelect');
+            
+            if (!$(this).val()) {
+                subjectSelect.html('<option value="">First select a class...</option>');
+                return;
+            }
+
+            subjectSelect.html('<option value="">Loading subjects...</option>');
+
+            $.ajax({
+                url: '../ajax/get_subjects.php',
+                type: 'GET',
+                data: { class_id: $(this).val() },
+                dataType: 'json',
+                success: function(subjects) {
+                    var options = '<option value="">Choose Subject...</option>';
+                    if (subjects && subjects.length > 0) {
+                        subjects.forEach(function(sub) {
+                            options += `<option value="${sub}">${sub}</option>`;
+                        });
+                    } else {
+                        options = '<option value="">No subjects mapped for this class. Please type manually.</option>';
+                        // Fallback if mapping isn't found
+                        subjectSelect.replaceWith('<input type="text" name="subject_name" id="dynamicSubjectSelect" class="form-control" placeholder="e.g., Mathematics" required>');
+                        return;
+                    }
+                    // Re-instate select if it was changed to text input previously
+                    if(subjectSelect.is("input")) {
+                        subjectSelect.replaceWith('<select name="subject_name" id="dynamicSubjectSelect" class="form-select" required></select>');
+                        subjectSelect = $('#dynamicSubjectSelect');
+                    }
+                    subjectSelect.html(options);
+                },
+                error: function() {
+                    subjectSelect.html('<option value="">Error loading subjects</option>');
+                }
+            });
+        });
     </script>
 </body>
 </html>

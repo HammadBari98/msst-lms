@@ -1,183 +1,287 @@
 <?php
 session_start();
-// require_once __DIR__ . '/../config/db_config.php'; // Not needed for static version
+require_once __DIR__ . '/../config/db_config.php';
 
+// Authenticate the user
 if (!isset($_SESSION['student_logged_in'])) {
-    header('Location: student_login.php');
+    header('Location: login.php');
     exit();
 }
 
-$student_id = $_SESSION['student_id'];
-$student_name = $_SESSION['student_name'];
+$student_name = $_SESSION['student_name'] ?? 'Student';
 
-// --- START: DUMMY DATA FOR ATTENDANCE ---
+// =======================================================
+// 1. GUARANTEED SAFE STUDENT ID TRANSLATOR
+// =======================================================
+$current_user_db_id = 0;
 
-// 1. Dummy data for the monthly summary cards.
-// The "percentage" will be used to style the progress circles.
-$monthly_summary = [
-    ['month_name' => 'June', 'year' => 2025, 'percentage' => 95, 'total_present' => 19, 'total_classes' => 20],
-    ['month_name' => 'May',  'year' => 2025, 'percentage' => 88, 'total_present' => 22, 'total_classes' => 25],
-    ['month_name' => 'April','year' => 2025, 'percentage' => 75, 'total_present' => 18, 'total_classes' => 24]
+// A. Prioritize the known string ID (e.g., ST-001) to fetch the exact users.id
+if (!empty($_SESSION['student_id'])) {
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE user_id_string = ? LIMIT 1");
+    $stmt->execute([$_SESSION['student_id']]);
+    $current_user_db_id = $stmt->fetchColumn();
+}
+
+// B. Fallback to email if the string ID fails
+if (!$current_user_db_id && !empty($_SESSION['student_email'])) {
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+    $stmt->execute([$_SESSION['student_email']]);
+    $current_user_db_id = $stmt->fetchColumn();
+}
+
+// C. Absolute last resort: Check if there's a valid numeric ID
+if (!$current_user_db_id && isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
+    $current_user_db_id = (int)$_SESSION['user_id'];
+}
+
+// =======================================================
+// 2. FETCH ATTENDANCE DATA
+// =======================================================
+$selected_month = $_GET['month'] ?? date('Y-m'); // Default to current month
+$monthly_records = [];
+$overall_stats = [
+    'total' => 0, 'present' => 0, 'absent' => 0, 'leave' => 0, 'late' => 0, 'percentage' => 100
 ];
 
-// 2. Dummy data for the detailed day-by-day log, grouped by month.
-$detailed_attendance = [
-    'June 2025' => [
-        ['date' => '2025-06-09', 'day_name' => 'Monday',    'status' => 'Present', 'course_name' => 'English Literature'],
-        ['date' => '2025-06-06', 'day_name' => 'Friday',    'status' => 'Present', 'course_name' => 'Introduction to Physics'],
-        ['date' => '2025-06-05', 'day_name' => 'Thursday',  'status' => 'Absent',  'course_name' => 'Calculus II'],
-        ['date' => '2025-06-04', 'day_name' => 'Wednesday', 'status' => 'Present', 'course_name' => 'English Literature'],
-        ['date' => '2025-06-03', 'day_name' => 'Tuesday',   'status' => 'Leave',   'course_name' => 'Introduction to Physics'],
-        ['date' => '2025-06-02', 'day_name' => 'Monday',    'status' => 'Present', 'course_name' => 'Calculus II'],
-    ],
-    'May 2025' => [
-        ['date' => '2025-05-30', 'day_name' => 'Friday', 'status' => 'Present', 'course_name' => 'English Literature'],
-        ['date' => '2025-05-29', 'day_name' => 'Thursday', 'status' => 'Present', 'course_name' => 'Introduction to Physics'],
-    ]
-];
+if ($current_user_db_id > 0) {
+    try {
+        // A. Fetch Overall Statistics (All-Time)
+        $stmt_stats = $pdo->prepare("
+            SELECT 
+                COUNT(id) as total_days,
+                SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present_days,
+                SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) as absent_days,
+                SUM(CASE WHEN status = 'Leave' THEN 1 ELSE 0 END) as leave_days,
+                SUM(CASE WHEN status = 'Late' THEN 1 ELSE 0 END) as late_days
+            FROM student_attendance 
+            WHERE student_id = ? AND status IS NOT NULL AND status != ''
+        ");
+        $stmt_stats->execute([$current_user_db_id]);
+        $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
 
-// --- END OF DUMMY DATA ---
+        if ($stats && $stats['total_days'] > 0) {
+            $overall_stats['total'] = (int)$stats['total_days'];
+            $overall_stats['present'] = (int)$stats['present_days'];
+            $overall_stats['absent'] = (int)$stats['absent_days'];
+            $overall_stats['leave'] = (int)$stats['leave_days'];
+            $overall_stats['late'] = (int)$stats['late_days'];
+            
+            // Calculate percentage (Present + Late count as attended)
+            $attended = $overall_stats['present'] + $overall_stats['late'];
+            $overall_stats['percentage'] = round(($attended / $overall_stats['total']) * 100);
+        }
 
+        // B. Fetch Daily Records for the Selected Month (Using LIKE for safety against VARCHAR dates)
+        $stmt_monthly = $pdo->prepare("
+            SELECT attendance_date, status 
+            FROM student_attendance 
+            WHERE student_id = ? AND attendance_date LIKE ?
+            ORDER BY attendance_date DESC
+        ");
+        // Appending '%' matches everything that starts with '2026-06', bypassing formatting rules
+        $stmt_monthly->execute([$current_user_db_id, $selected_month . '%']);
+        $monthly_records = $stmt_monthly->fetchAll(PDO::FETCH_ASSOC);
+
+    } catch (PDOException $e) {
+        $error_message = "A database error occurred while fetching your attendance.";
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance | <?= htmlspecialchars($student_name) ?></title>
+    <title>My Attendance | <?= htmlspecialchars($student_name) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --primary: #4e73df; --secondary: #858796; --success: #1cc88a; 
-            --warning: #f6c23e; --danger: #e74a3b; --light-bg: #f8f9fc;
+            --info: #36b9cc; --warning: #f6c23e; --danger: #e74a3b; 
+            --light-bg: #f8f9fc;
         }
         body { font-family: 'Segoe UI', sans-serif; background-color: var(--light-bg); }
-        .accordion-button:not(.collapsed) { color: #fff; background-color: var(--primary); }
+        .stat-card { border-left: 4px solid; transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
+        .border-left-primary { border-left-color: var(--primary); }
+        .border-left-success { border-left-color: var(--success); }
+        .border-left-danger { border-left-color: var(--danger); }
+        .border-left-warning { border-left-color: var(--warning); }
         
-        /* --- CSS for the Progress Circle --- */
-        .progress-circle {
-            width: 120px; height: 120px; border-radius: 50%;
-            display: grid; place-items: center;
-            background: conic-gradient(var(--primary) calc(var(--p) * 1%), var(--light-bg) 0);
-            transition: background 0.5s;
+        .progress-bar-custom {
+            height: 10px;
+            border-radius: 5px;
         }
-        .progress-circle::before {
-            counter-reset: percentage var(--p);
-            content: counter(percentage) '%';
-            font-size: 1.5rem; font-weight: 700; color: var(--primary);
-            background: #fff; width: 85%; height: 85%; border-radius: 50%;
-            display: grid; place-items: center;
-        }
-        .progress-circle.over-75 { background: conic-gradient(var(--success) calc(var(--p) * 1%), var(--light-bg) 0); }
-        .progress-circle.over-75::before { color: var(--success); }
-        .progress-circle.under-80 { background: conic-gradient(var(--warning) calc(var(--p) * 1%), var(--light-bg) 0); }
-        .progress-circle.under-80::before { color: var(--warning); }
     </style>
 </head>
 <body>
-    <?php include 'sidebar.php'; ?>
+
+    <?php include 'sidebar.php' ?>
+
     <div id="main-content">
-        <?php include 'header.php'; ?>
+        <?php include 'header.php' ?>
+
         <div class="content-wrapper p-4">
             <div class="container-fluid">
-                <h1 class="h3 mb-4">My Attendance</h1>
-
-                <h4 class="h5 mb-3">Monthly Summary</h4>
-                <div class="row">
-                    <?php if(empty($monthly_summary)): ?>
-                        <div class="col-12"><div class="alert alert-info">No attendance summary available yet.</div></div>
-                    <?php else: ?>
-                        <?php foreach($monthly_summary as $summary): ?>
-                            <div class="col-md-6 col-lg-4 mb-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <h5 class="card-title"><?= htmlspecialchars($summary['month_name']) . ' ' . $summary['year'] ?></h5>
-                                        <?php 
-                                            $progress_class = '';
-                                            if ($summary['percentage'] >= 75) $progress_class = 'over-75';
-                                            if ($summary['percentage'] < 80) $progress_class = 'under-80';
-                                        ?>
-                                        <div class="progress-circle my-3 mx-auto <?= $progress_class ?>" style="--p:<?= $summary['percentage'] ?>;"></div>
-                                        <p class="card-text text-muted">
-                                            Attended <strong><?= $summary['total_present'] ?></strong> out of <strong><?= $summary['total_classes'] ?></strong> classes.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                
+                <div class="d-sm-flex align-items-center justify-content-between mb-4">
+                    <h1 class="h3 mb-0 text-gray-800 fw-bold"><i class="fas fa-user-check me-2 text-primary"></i>My Attendance</h1>
                 </div>
 
-                <h4 class="h5 mb-3 mt-4">Detailed Log</h4>
-                <div class="accordion" id="attendanceAccordion">
-                    <?php if (empty($detailed_attendance)): ?>
-                        <div class="card"><div class="card-body text-center text-muted">No detailed attendance records found.</div></div>
-                    <?php else: ?>
-                        <?php $is_first = true; foreach ($detailed_attendance as $month => $records): ?>
-                            <div class="accordion-item">
-                                <h2 class="accordion-header">
-                                    <button class="accordion-button <?= $is_first ? '' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse<?= str_replace(' ', '', $month) ?>">
-                                        <?= htmlspecialchars($month) ?>
-                                    </button>
-                                </h2>
-                                <div id="collapse<?= str_replace(' ', '', $month) ?>" class="accordion-collapse collapse <?= $is_first ? 'show' : '' ?>" data-bs-parent="#attendanceAccordion">
-                                    <div class="accordion-body p-0">
-                                        <div class="table-responsive">
-                                            <table class="table table-striped table-hover mb-0">
-                                                <thead>
-                                                    <tr class="table-light"><th>Date</th><th>Day</th><th>Course</th><th>Status</th></tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($records as $record): ?>
-                                                        <tr>
-                                                            <td><?= date('M j, Y', strtotime($record['date'])) ?></td>
-                                                            <td><?= htmlspecialchars($record['day_name']) ?></td>
-                                                            <td><?= htmlspecialchars($record['course_name']) ?></td>
-                                                            <td>
-                                                                <?php 
-                                                                    $status_class = 'bg-secondary';
-                                                                    if ($record['status'] == 'Present') $status_class = 'bg-success';
-                                                                    if ($record['status'] == 'Absent') $status_class = 'bg-danger';
-                                                                    if ($record['status'] == 'Leave') $status_class = 'bg-warning text-dark';
-                                                                ?>
-                                                                <span class="badge <?= $status_class ?>"><?= htmlspecialchars($record['status']) ?></span>
-                                                            </td>
-                                                        </tr>
-                                                    <?php $is_first = false; endforeach; ?>
-                                                </tbody>
-                                            </table>
+                <!-- Overall Stats Row -->
+                <div class="row mb-4">
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card stat-card border-left-primary shadow-sm h-100 py-2 border-0">
+                            <div class="card-body">
+                                <div class="row no-gutters align-items-center">
+                                    <div class="col mr-2">
+                                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Overall Attendance</div>
+                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $overall_stats['percentage'] ?>%</div>
+                                        <div class="progress progress-bar-custom mt-2">
+                                            <div class="progress-bar <?= $overall_stats['percentage'] >= 75 ? 'bg-success' : ($overall_stats['percentage'] >= 50 ? 'bg-warning' : 'bg-danger') ?>" 
+                                                 role="progressbar" style="width: <?= $overall_stats['percentage'] ?>%"></div>
                                         </div>
                                     </div>
+                                    <div class="col-auto"><i class="fas fa-percentage fa-2x text-gray-300 opacity-50"></i></div>
                                 </div>
                             </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card stat-card border-left-success shadow-sm h-100 py-2 border-0">
+                            <div class="card-body">
+                                <div class="row no-gutters align-items-center">
+                                    <div class="col mr-2">
+                                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total Presents</div>
+                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $overall_stats['present'] ?></div>
+                                    </div>
+                                    <div class="col-auto"><i class="fas fa-calendar-check fa-2x text-gray-300 opacity-50"></i></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card stat-card border-left-danger shadow-sm h-100 py-2 border-0">
+                            <div class="card-body">
+                                <div class="row no-gutters align-items-center">
+                                    <div class="col mr-2">
+                                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Total Absents</div>
+                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $overall_stats['absent'] ?></div>
+                                    </div>
+                                    <div class="col-auto"><i class="fas fa-calendar-times fa-2x text-gray-300 opacity-50"></i></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card stat-card border-left-warning shadow-sm h-100 py-2 border-0">
+                            <div class="card-body">
+                                <div class="row no-gutters align-items-center">
+                                    <div class="col mr-2">
+                                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Leaves / Late</div>
+                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $overall_stats['leave'] ?> / <?= $overall_stats['late'] ?></div>
+                                    </div>
+                                    <div class="col-auto"><i class="fas fa-clock fa-2x text-gray-300 opacity-50"></i></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Monthly Details -->
+                <div class="card shadow-sm border-0 rounded-3">
+                    <div class="card-header bg-white py-3 d-flex flex-column flex-md-row align-items-center justify-content-between border-bottom">
+                        <h6 class="m-0 font-weight-bold text-primary mb-2 mb-md-0"><i class="far fa-calendar-alt me-2"></i>Monthly Attendance Record</h6>
+                        
+                        <form method="GET" class="d-flex align-items-center">
+                            <label class="me-2 fw-bold text-secondary small mb-0">Select Month:</label>
+                            <input type="month" name="month" class="form-control form-control-sm border-primary" value="<?= htmlspecialchars($selected_month) ?>" onchange="this.form.submit()">
+                        </form>
+                    </div>
+                    
+                    <div class="card-body p-0">
+                        <?php if (empty($monthly_records)): ?>
+                            <div class="text-center p-5 text-muted">
+                                <i class="fas fa-clipboard-list fa-3x mb-3 opacity-25"></i>
+                                <h5>No attendance records found for <?= date('F Y', strtotime($selected_month . '-01')) ?></h5>
+                            </div>
+                        <?php else: ?>
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-4">Date</th>
+                                            <th>Day</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($monthly_records as $record): 
+                                            $date_obj = new DateTime($record['attendance_date']);
+                                            $status = $record['status'];
+                                            
+                                            // Determine badge color
+                                            $badge_class = 'bg-secondary';
+                                            if ($status === 'Present') $badge_class = 'bg-success';
+                                            elseif ($status === 'Absent') $badge_class = 'bg-danger';
+                                            elseif ($status === 'Leave') $badge_class = 'bg-warning text-dark';
+                                            elseif ($status === 'Late') $badge_class = 'bg-info text-dark';
+                                        ?>
+                                            <tr>
+                                                <td class="ps-4 fw-bold text-dark"><?= $date_obj->format('d M Y') ?></td>
+                                                <td class="text-muted"><?= $date_obj->format('l') ?></td>
+                                                <td>
+                                                    <span class="badge <?= $badge_class ?> px-3 py-2 rounded-pill shadow-sm">
+                                                        <?= htmlspecialchars($status) ?>
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
             </div>
         </div>
+        
+        <footer class="footer mt-auto py-3 bg-white border-top">
+            <div class="container text-center text-muted small">
+                 &copy; MSST LMS <?= date('Y') ?> | Student Portal
+            </div>
+        </footer>
     </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-    // The final, correct sidebar toggle script
     const sidebar = document.getElementById('sidebar');
     const mainContent = document.getElementById('main-content');
     const toggleBtn = document.getElementById('sidebarToggle');
+
     if (toggleBtn && sidebar && mainContent) {
         toggleBtn.addEventListener('click', (event) => {
             event.stopPropagation();
             if (window.innerWidth <= 768) {
                 sidebar.classList.toggle('show');
+                mainContent.classList.toggle('show');
             } else {
                 sidebar.classList.toggle('collapsed');
                 mainContent.classList.toggle('collapsed');
             }
         });
     }
+
     document.addEventListener('click', function (event) {
-        if (sidebar && toggleBtn && !sidebar.contains(event.target) && !toggleBtn.contains(event.target)) {
+        if (window.innerWidth <= 768 && sidebar && toggleBtn && !sidebar.contains(event.target) && !toggleBtn.contains(event.target)) {
             if (sidebar.classList.contains('show')) {
                 sidebar.classList.remove('show');
+                mainContent.classList.remove('show');
             }
         }
     });

@@ -549,7 +549,25 @@ $fee_categories_json = json_encode(array_values($fee_categories));
         .voucher-page-content { background: #e9ecef; padding: 20px; display: flex; justify-content: space-between; gap: 15px; overflow-x: auto; }
         .voucher-page-content > div { flex: 1; min-width: 310px; }
         
-        .modern-voucher { background: #ffffff; border: 1px solid #dee2e6; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); overflow: hidden; font-family: 'Arial', sans-serif; height: 100%; display: flex; flex-direction: column; }
+        .modern-voucher { position: relative; background: #ffffff; border: 1px solid #dee2e6; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); overflow: hidden; font-family: 'Arial', sans-serif; height: 100%; display: flex; flex-direction: column; }
+
+/* --- NEW: PAID WATERMARK --- */
+.mv-paid-stamp {
+    position: absolute;
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-35deg);
+    font-size: 3.5rem;
+    font-weight: 900;
+    color: rgba(40, 167, 69, 0.15);
+    border: 5px solid rgba(40, 167, 69, 0.15);
+    padding: 10px 30px;
+    border-radius: 12px;
+    pointer-events: none;
+    z-index: 10;
+    text-transform: uppercase;
+    letter-spacing: 6px;
+}
         
         .mv-header { display: flex; align-items: center; padding: 12px 15px; border-bottom: 3px solid #906833; background: #f8f9fa; gap: 12px; }
         .mv-logo { width: 45px; height: 45px; object-fit: contain; flex-shrink: 0; }
@@ -1084,7 +1102,7 @@ function calculateFeeForStudent(student) {
 }
 
 // ---- SMART MSST GRID VOUCHER MAPPING ----
-// ---- DYNAMIC VOUCHER MAPPING (Al-Abbas Layout + MSST Details) ----
+// ---- DYNAMIC VOUCHER MAPPING (Al-Abbas Layout + MSST Details + PAID Stamp) ----
 function generateVoucherHTML(record, components, copyType) {
     let breakdownHtml = '';
     let total = 0;
@@ -1122,8 +1140,18 @@ function generateVoucherHTML(record, components, copyType) {
         installmentBadge = `<div style="background-color: #ffc107; text-align: center; font-weight: 900; font-size: 11px; padding: 5px; color: #000; letter-spacing: 1px;">INSTALLMENT ${installMatch[1]}</div>`;
     }
 
+    // --- NEW: PAID LOGIC ---
+    let paidWatermark = '';
+    let paidDateHtml = '';
+    if (record.status === 'Paid') {
+        paidWatermark = '<div class="mv-paid-stamp">PAID</div>';
+        let paidOnStr = record.paid_on ? new Date(record.paid_on).toLocaleDateString('en-GB') : 'N/A';
+        paidDateHtml = `<div class="mv-total-row" style="color: #198754; margin-top: 4px;"><span>Paid On:</span><strong>${paidOnStr}</strong></div>`;
+    }
+
     return `
         <div class="modern-voucher">
+            ${paidWatermark}
             <div class="mv-header">
                 <img src="assets/images/msst-logo.png" alt="MSST Logo" class="mv-logo">
                 <div class="mv-school-text">
@@ -1205,6 +1233,7 @@ function generateVoucherHTML(record, components, copyType) {
                     <span>TOTAL AMOUNT:</span>
                     <span>PKR ${recordAmount.toFixed(0)}</span>
                 </div>
+                ${paidDateHtml}
             </div>
             
             <div class="mv-footer">
@@ -1228,11 +1257,14 @@ function viewDetailedVoucher(slipNo) {
         }, error: () => $('#detailedVoucherContent').html('<div class="alert alert-danger m-3">Error loading details. Ensure ajax/get_fee_voucher_details.php is correctly created.</div>')
     });
 }
+
+
 function printVoucher() {
     const parentCopy = document.getElementById('parent-copy').innerHTML;
     const hostelCopy = document.getElementById('hostel-copy').innerHTML;
     const bankCopy = document.getElementById('bank-copy').innerHTML;
     const printWindow = window.open('', '_blank');
+    
     printWindow.document.write(`
     <html><head><title>Fee Slip - MSST</title>
     <style>
@@ -1247,7 +1279,8 @@ function printVoucher() {
         .voucher-col { width: 32.5%; height: 100%; box-sizing: border-box; padding: 3px; } 
         
         /* MODERN PRINT CSS (Thicker 1.5px border for better print visibility) */
-        .modern-voucher { background: #ffffff; border: 1.5px solid #000; border-radius: 8px; overflow: hidden; height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
+        /* Added position: relative !important so the watermark stays centered */
+        .modern-voucher { position: relative !important; background: #ffffff; border: 1.5px solid #000; border-radius: 8px; overflow: hidden; height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
         .mv-header { display: flex; align-items: center; padding: 8px 10px; border-bottom: 2px solid #000; background: #f8f9fa !important; gap: 8px; }
         .mv-logo { width: 38px; height: 38px; object-fit: contain; flex-shrink: 0; }
         .mv-school-text { flex: 1; line-height: 1.1; min-width: 0; }
@@ -1279,10 +1312,40 @@ function printVoucher() {
         
         .mv-footer { padding: 8px 10px; font-size: 7.5px; color: #000; line-height: 1.3; margin-top: auto; border-top: 1px solid #000; }
         .mv-warning { font-weight: bold; }
+
+        /* BULLETPROOF PRINT POSITIONING FOR WATERMARK */
+        .mv-paid-stamp { 
+            display: block !important;
+            position: absolute !important; 
+            top: 45% !important; 
+            left: 50% !important; 
+            transform: translate(-50%, -50%) rotate(-35deg) !important; 
+            font-size: 3.5rem !important; 
+            font-weight: 900 !important; 
+            color: rgba(40, 167, 69, 0.25) !important; 
+            border: 4px solid rgba(40, 167, 69, 0.25) !important; 
+            padding: 10px 20px !important; 
+            border-radius: 12px !important; 
+            pointer-events: none !important; 
+            z-index: 999 !important; 
+            text-transform: uppercase !important; 
+            letter-spacing: 6px !important; 
+            text-align: center !important;
+            background: transparent !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
     </style></head>
     <body><div class="voucher-page"><div class="voucher-col">${parentCopy}</div><div class="voucher-col">${hostelCopy}</div><div class="voucher-col">${bankCopy}</div></div></body></html>`);
-    printWindow.document.close(); printWindow.focus(); setTimeout(() => { printWindow.print(); printWindow.close(); }, 300);
+    
+    printWindow.document.close(); 
+    printWindow.focus(); 
+    setTimeout(() => { 
+        printWindow.print(); 
+        printWindow.close(); 
+    }, 500); // 500ms delay ensures styles are painted before printing
 }
+
 
 function editComponent(id, name, amount, type, desc, optional, active) {
     $('#editCompId').val(id); $('#editCompName').val(name); $('#editCompAmount').val(amount); $('#editCompType').val(type); $('#editCompDesc').val(desc); $('#editCompOptional').prop('checked', optional); $('#editCompActive').prop('checked', active);

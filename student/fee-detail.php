@@ -39,7 +39,8 @@ try {
 $view_mode = $_GET['view'] ?? 'list';
 $slip_no = $_GET['id'] ?? '';
 
-// --- PHP VOUCHER RENDER FUNCTION (DYNAMIC LIST LAYOUT) ---
+
+// --- PHP VOUCHER RENDER FUNCTION (MODERN MSST LAYOUT) ---
 function render_voucher_copy($copy_type, $data) {
     $components = $data['fee_components'] ?? [];
     $total_fee = 0;
@@ -53,12 +54,12 @@ function render_voucher_copy($copy_type, $data) {
             $breakdownHtml .= "
                 <tr>
                     <td>{$name}</td>
-                    <td class=\"text-end\" style=\"text-align: right;\">" . number_format($amt, 0) . "</td>
+                    <td class=\"text-end\">" . number_format($amt, 0) . "</td>
                 </tr>
             ";
         }
     } else {
-        $breakdownHtml = '<tr><td colspan="2" class="text-center">No components found</td></tr>';
+        $breakdownHtml = '<tr><td colspan="2" class="text-center text-muted">No components found</td></tr>';
     }
     
     $recordAmount = $data['net_payable_before_due_raw'] ?? $total_fee;
@@ -66,102 +67,108 @@ function render_voucher_copy($copy_type, $data) {
     $installmentBadge = '';
     if (preg_match('/-(\d+)$/', $data['slip_no'], $matches)) {
         if (intval($matches[1]) < 10) {
-            $installmentBadge = '
-            <div style="background-color: #ffc107; text-align: center; font-weight: bold; font-size: 11px; padding: 4px; margin-bottom: 6px; border: 1px solid #000; letter-spacing: 1px; color: #000;">
-                INSTALLMENT ' . $matches[1] . '
-            </div>';
+            $installmentBadge = '<div style="background-color: #ffc107; text-align: center; font-weight: 900; font-size: 11px; padding: 5px; color: #000; letter-spacing: 1px;">INSTALLMENT ' . $matches[1] . '</div>';
         }
     }
+
+    $paidWatermark = '';
+    $paidDateHtml = '';
+    if ($data['status'] === 'Paid') {
+        $paidWatermark = '<div class="mv-paid-stamp">PAID</div>';
+        $paidOnStr = !empty($data['paid_on']) ? htmlspecialchars($data['paid_on']) : 'N/A';
+        $paidDateHtml = '<div class="mv-total-row" style="color: #198754; margin-top: 4px;"><span>Paid On:</span><strong>' . $paidOnStr . '</strong></div>';
+    }
     ?>
-    <div class="voucher-instance">
-        <div class="voucher-container">
-            <div class="header-section">
-                <div class="logo-container">
-                    <img src="<?= htmlspecialchars($data['logo_path']) ?>" alt="School Logo" class="logo">
-                    <div class="school-info">
-                        <strong><?= htmlspecialchars($data['school_name']) ?></strong><br>
-                        <?= htmlspecialchars($data['school_address_line1']) ?><br>
-                        <?= htmlspecialchars($data['school_contact_line']) ?><br>
-                        <?= htmlspecialchars($data['school_email_web_line']) ?>
-                    </div>
-                </div>
-                <div class="affiliated-copy-type">
-                    <span>Affiliated with FBISE</span><br>
-                    <span class="copy-type-label"><?= htmlspecialchars($copy_type) ?></span>
-                </div>
+    <div class="modern-voucher">
+        <?= $paidWatermark ?>
+        <div class="mv-header">
+            <img src="<?= htmlspecialchars($data['logo_path']) ?>" alt="MSST Logo" class="mv-logo">
+            <div class="mv-school-text">
+                <div class="mv-school-name">Muhaddisa School of Science & Technology</div>
+                <div class="mv-school-address">Kushmara Toq, Near Fatima Jinnah Girls HSS, Quaidabad Skardu<br>0317-9174495 | www.msstskardu.com</div>
             </div>
-            
-            <div class="bank-details">
-                <?= htmlspecialchars($data['bank_details_line']) ?>
+            <div class="mv-copy-badge">
+                <span class="mv-fbise">Affiliated with FBISE</span>
+                <?= htmlspecialchars($copy_type) ?>
             </div>
-            
-            <?= $installmentBadge ?>
-            
-            <table class="student-info-table" style="table-layout: fixed; width: 100%;">
-                <tr>
-                    <th style="width: 22%;">NAME</th>
-                    <td colspan="3" class="student-name-value" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><?= htmlspecialchars($data['student_name']) ?></td>
-                </tr>
-                <tr>
-                    <th style="width: 22%;">ID</th>
-                    <td class="value-cell" style="width: 28%;"><?= htmlspecialchars($data['student_id_display']) ?></td>
-                    <th style="width: 22%;">CLASS</th>
-                    <td class="value-cell" style="width: 28%;"><?= htmlspecialchars($data['class_section']) ?>-<?= htmlspecialchars($data['section_alpha']) ?></td>
-                </tr>
-                <tr>
-                    <th>PROGRAM</th>
-                    <td class="value-cell"><?= htmlspecialchars($data['program']) ?></td>
-                    <th>PERIOD</th>
-                    <td class="value-cell"><?= htmlspecialchars($data['fee_period'] ?? 'N/A') ?></td>
-                </tr>
-                <tr>
-                    <th>SLIP #</th>
-                    <td class="value-cell"><?= htmlspecialchars($data['slip_no']) ?></td>
-                    <th>ISSUED</th>
-                    <td class="value-cell"><?= htmlspecialchars($data['issue_date']) ?></td>
-                </tr>
-                <tr>
-                    <td colspan="4" class="due-date-cell align-middle" style="padding: 4px; font-size: 11px; text-align: center; background-color: #dc3545; color: white;">
-                        <strong>DUE DATE: <?= htmlspecialchars($data['due_date']) ?></strong>
-                    </td>
-                </tr>
-            </table>
-            
-            <table class="fees-table" style="table-layout: fixed; width: 100%;">
-                <thead>
-                    <tr>
-                        <th>Fee Component</th>
-                        <th style="width: 40%; text-align: right;">Amount (PKR)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?= $breakdownHtml ?>
-                    <tr>
-                        <th class="text-end" style="text-align: right;">TOTAL</th>
-                        <td class="text-end" style="text-align: right;"><strong><?= number_format($recordAmount, 0) ?></strong></td>
-                    </tr>
-                </tbody>
-            </table>
-            
-            <div class="total-payable-section">
-                <div>BEFORE DUE DATE<br><strong style="font-size: 10px;">PKR <?= number_format($recordAmount, 0) ?></strong></div>
-                <div>AFTER DUE DATE<br><strong style="font-size: 10px;">PKR <?= number_format($recordAmount + 500, 0) ?></strong></div>
+        </div>
+        
+        <div class="mv-bank-banner" style="line-height: 1.4; padding: 6px 4px;">
+            Soneri Bank Main Branch Skardu<br>
+            Title: Muhaddisa School of Science and Technology<br>
+            Account: 003320015592867
+        </div>
+        
+        <?= $installmentBadge ?>
+        
+        <div class="mv-student-info">
+            <div class="mv-info-box" style="grid-column: span 2;">
+                <div class="mv-info-label">Student Name</div>
+                <div class="mv-info-value" style="font-size: 0.9rem;"><?= htmlspecialchars($data['student_name']) ?></div>
             </div>
-            
-            <div class="bank-fill-note">To be filled by the bank</div>
-            
-            <div class="late-payment-note">
-                LATE PAYMENT : After due date Rs <?= htmlspecialchars($data['late_payment_daily_charge']) ?>/- will be charged per day.<br>
-                <span style="display:block; margin-top: 3px;">Duplicate fee will be charged Rs. <?= htmlspecialchars($data['duplicate_fee_charge']) ?>/-</span>
+            <div class="mv-info-box">
+                <div class="mv-info-label">Father's Name</div>
+                <div class="mv-info-value"><?= htmlspecialchars($data['father_name'] ?? 'N/A') ?></div>
             </div>
-            
-            <div class="footer-note">
-                Note: Rs. <?= htmlspecialchars($data['summer_task_note_amount']) ?>/- will be charged as a Summer Task, if current dues will not pay in the same month.<br>
-                STATUS: <strong><?= htmlspecialchars($data['status']) ?></strong>
-                <?php if ($data['status'] === 'Paid' && !empty($data['paid_on'])): ?>
-                    | PAID: <?= htmlspecialchars($data['paid_on']) ?>
-                <?php endif; ?>
+            <div class="mv-info-box">
+                <div class="mv-info-label">Student ID</div>
+                <div class="mv-info-value"><?= htmlspecialchars($data['student_id_display']) ?></div>
             </div>
+            <div class="mv-info-box">
+                <div class="mv-info-label">Class & Section</div>
+                <div class="mv-info-value"><?= htmlspecialchars($data['class_section']) ?>-<?= htmlspecialchars($data['section_alpha']) ?></div>
+            </div>
+            <div class="mv-info-box">
+                <div class="mv-info-label">Program</div>
+                <div class="mv-info-value"><?= htmlspecialchars($data['program']) ?></div>
+            </div>
+            <div class="mv-info-box">
+                <div class="mv-info-label">Voucher No.</div>
+                <div class="mv-info-value"><?= htmlspecialchars($data['slip_no']) ?></div>
+            </div>
+            <div class="mv-info-box">
+                <div class="mv-info-label">Fee Month / Issued</div>
+                <div class="mv-info-value"><?= htmlspecialchars($data['fee_period']) ?> &nbsp;|&nbsp; <?= htmlspecialchars($data['issue_date']) ?></div>
+            </div>
+        </div>
+        
+        <div class="mv-due-banner">
+            <span class="mv-due-label">PAYMENT DUE DATE</span>
+            <span class="mv-due-date"><?= htmlspecialchars($data['due_date']) ?></span>
+        </div>
+        
+        <table class="mv-fee-table">
+            <thead>
+                <tr>
+                    <th>Fee Description</th>
+                    <th class="text-end">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?= $breakdownHtml ?>
+            </tbody>
+        </table>
+        
+        <div class="mv-totals">
+            <div class="mv-total-row">
+                <span>Payable before Due Date:</span>
+                <strong>PKR <?= number_format($recordAmount, 0) ?></strong>
+            </div>
+            <div class="mv-total-row mv-warning">
+                <span>Payable after Due Date (Incl. Late Fee):</span>
+                <strong>PKR <?= number_format($recordAmount + 500, 0) ?></strong>
+            </div>
+            <div class="mv-total-row grand">
+                <span>TOTAL AMOUNT:</span>
+                <span>PKR <?= number_format($recordAmount, 0) ?></span>
+            </div>
+            <?= $paidDateHtml ?>
+        </div>
+        
+        <div class="mv-footer">
+            <span class="mv-warning">LATE PAYMENT:</span> After due date flat Rs. 500/- will be charged per month. Duplicate fee is Rs 50/-.<br>
+            <strong>Note:</strong> Rs 550/- charged as Summer Task if dues aren't paid same month.<br>
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #dee2e6; text-align: right; font-style: italic;">To be filled by bank</div>
         </div>
     </div>
     <?php
@@ -295,35 +302,49 @@ if ($view_mode === 'voucher') {
         .status-card.unpaid { border-left-color: var(--danger); }
         .table-hover tbody tr:hover { background-color: #f1f3f5; }
 
-        /* VOUCHER SPECIFIC STYLES */
-        .voucher-page-content { display: flex; justify-content: space-between; gap: 10px; background: white; padding: 15px; border-radius: 8px; }
-        .voucher-page-content > div { flex: 1; width: 32%; }
-        .voucher-instance { background-color: #fff; page-break-inside: avoid; border: none; padding: 0; height: 100%; }
-        .voucher-container { border: 1px dashed #666; padding: 10px; background-color: #fff; height: 100%; display: flex; flex-direction: column; }
-        .header-section { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
-        .logo-container { display: flex; align-items: center; }
-        .logo { width: 70px; height: auto; margin-right: 10px; border: 1px solid #ddd; padding: 3px; }
-        .school-info { font-size: 0.7rem; line-height: 1.2; }
-        .school-info strong { font-size: 0.8rem; display: block; margin-bottom: 2px; }
-        .affiliated-copy-type { text-align: right; font-size: 0.75rem; }
-        .affiliated-copy-type span { display: block; border: 1px solid #000; padding: 3px 7px; margin-bottom: 4px; min-width: 120px; text-align: center; }
-        .copy-type-label { font-weight: bold; background-color: #f0f0f0; }
-        .bank-details { text-align: center; font-size: 0.8rem; font-weight: bold; margin-bottom: 8px; padding: 4px; border: 1px solid #000; }
         
-        .student-info-table, .fees-table { width: 100%; margin-bottom: 8px; font-size: 0.65rem; border-collapse: collapse; }
-        .student-info-table th, .student-info-table td, .fees-table th, .fees-table td { border: 1px solid #000; padding: 3px; vertical-align: middle; text-align: left; }
-        .student-info-table th, .fees-table th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
-        .student-info-table td.student-name-value { font-weight: bold; text-align: left !important; }
-        .student-info-table td.value-cell, .fees-table td { text-align: center !important; font-weight: bold; }
-        .due-date-cell { color: #fff !important; background-color: #dc3545 !important; font-weight: bold; text-align: center !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+/* VOUCHER SPECIFIC STYLES */
+        .voucher-page-content { background: #e9ecef; padding: 20px; display: flex; justify-content: space-between; gap: 15px; overflow-x: auto; border-radius: 8px; }
+        .voucher-page-content > div { flex: 1; min-width: 310px; }
         
-        .total-payable-section { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.7rem; gap:5px; }
-        .total-payable-section div { border: 1px solid #000; padding: 4px 8px; text-align:center; flex:1; background-color: #f8f9fa; font-weight: bold; }
-        .bank-fill-note { font-size: 0.65rem; text-align: right; margin-top: 5px; margin-bottom: 5px; font-style: italic;}
-        .late-payment-note { font-size: 0.7rem; margin-top: 5px; border: 1px solid #000; padding: 3px; font-weight: bold; }
-        .footer-note { font-size: 0.7rem; margin-top: auto; border-top: 1px solid #000; padding-top: 4px; }
-        .website-link { font-weight: bold; font-size: 0.75rem; float: right; }
-        .print-button-container { text-align: center; margin-bottom: 20px; }
+        .modern-voucher { position: relative; background: #ffffff; border: 1px solid #dee2e6; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); overflow: hidden; font-family: 'Arial', sans-serif; height: 100%; display: flex; flex-direction: column; }
+        .mv-paid-stamp { position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%) rotate(-35deg); font-size: 3.5rem; font-weight: 900; color: rgba(40, 167, 69, 0.15); border: 5px solid rgba(40, 167, 69, 0.15); padding: 10px 30px; border-radius: 12px; pointer-events: none; z-index: 10; text-transform: uppercase; letter-spacing: 6px; }
+        
+        .mv-header { display: flex; align-items: center; padding: 12px 15px; border-bottom: 3px solid #906833; background: #f8f9fa; gap: 12px; }
+        .mv-logo { width: 45px; height: 45px; object-fit: contain; flex-shrink: 0; }
+        .mv-school-text { flex: 1; line-height: 1.2; min-width: 0; }
+        .mv-school-name { font-size: 0.75rem; font-weight: 900; color: #906833; text-transform: uppercase; margin-bottom: 2px; }
+        .mv-school-address { font-size: 0.6rem; color: #6c757d; }
+        
+        .mv-copy-badge { background: #906833; color: #fff; font-size: 0.7rem; font-weight: bold; padding: 5px 10px; border-radius: 6px; text-align: center; flex-shrink: 0; }
+        .mv-fbise { font-size: 0.55rem; display: block; margin-bottom: 2px; color: #e9ecef; font-weight: normal; letter-spacing: 0.5px;}
+        
+        .mv-bank-banner { background: #f1f3f5; text-align: center; font-size: 0.7rem; font-weight: bold; padding: 6px; color: #495057; border-bottom: 1px solid #dee2e6; }
+        
+        .mv-student-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px; background: #fff; }
+        .mv-info-box { display: flex; flex-direction: column; }
+        .mv-info-label { font-size: 0.6rem; color: #868e96; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+        .mv-info-value { font-size: 0.75rem; color: #212529; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        .mv-due-banner { background: #dc3545; color: white; display: flex; justify-content: space-between; align-items: center; padding: 8px 15px; }
+        .mv-due-label { font-size: 0.75rem; font-weight: bold; letter-spacing: 1px;}
+        .mv-due-date { font-size: 0.95rem; font-weight: 900; }
+        
+        .mv-fee-table { width: 100%; border-collapse: collapse; margin: 0; }
+        .mv-fee-table th { background: #f8f9fa; font-size: 0.65rem; color: #6c757d; padding: 8px 15px; text-align: left; border-top: 1px solid #dee2e6; border-bottom: 1px solid #dee2e6; text-transform: uppercase; }
+        .mv-fee-table th.text-end { text-align: right; }
+        .mv-fee-table td { padding: 6px 15px; font-size: 0.75rem; color: #495057; border-bottom: 1px dashed #e9ecef; }
+        .mv-fee-table td.text-end { text-align: right; font-weight: bold; color: #212529; }
+        
+        .mv-totals { padding: 15px; background: #f8f9fa; border-top: 2px solid #212529; }
+        .mv-total-row { display: flex; justify-content: space-between; margin-bottom: 4px; align-items: center; font-size: 0.75rem; color: #495057; }
+        .mv-total-row strong { color: #212529; }
+        .mv-total-row.grand { font-size: 0.95rem; font-weight: 900; color: #906833; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #ced4da; }
+        
+        .mv-footer { padding: 12px 15px; font-size: 0.65rem; color: #6c757d; line-height: 1.4; background: #fff; margin-top: auto; border-top: 1px solid #dee2e6; }
+        .mv-warning { color: #dc3545; font-weight: bold; }
+
+        .print-button-container { margin-bottom: 20px; }
 
         /* No fees card */
         .no-fees-card { border: 2px dashed #dee2e6; background-color: #f8f9fa; }
@@ -433,6 +454,7 @@ if ($view_mode === 'voucher') {
         });
     }
 
+   
     function printVoucher() {
         const parentCopy = document.getElementById('parent-copy').innerHTML;
         const hostelCopy = document.getElementById('hostel-copy').innerHTML;
@@ -440,39 +462,75 @@ if ($view_mode === 'voucher') {
         
         const printWindow = window.open('', '_blank');
         printWindow.document.write(`
-            <html><head><title>Fee Slip - MSST</title>
-            <style>
-                @page { size: A4 landscape; margin: 3mm; }
-                body { margin: 0; padding: 0; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff; }
-                .voucher-page { display: flex; flex-direction: row; justify-content: space-between; width: 100%; height: 195mm; box-sizing: border-box; }
-                .voucher-col { width: 32%; height: 100%; box-sizing: border-box; }
-                .voucher-instance { height: 100%; }
-                .voucher-container { border: 1px dashed #000; height: 100%; padding: 5px; display: flex; flex-direction: column; box-sizing: border-box; }
-                .header-section { display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 3px; }
-                .logo-container { display: flex; align-items: center; }
-                .logo { width: 45px; height: auto; margin-right: 5px; border: 1px solid #ddd; padding: 2px; }
-                .school-info { font-size: 7px; line-height: 1.1; }
-                .school-info strong { font-size: 10px; margin-bottom: 1px; display: block; }
-                .affiliated-copy-type { text-align: right; font-size: 7px; }
-                .affiliated-copy-type span { display: block; border: 1px solid #000; padding: 1px 3px; margin-bottom: 1px; }
-                .copy-type-label { font-weight: bold; background-color: #e9ecef !important; font-size: 9px !important;}
-                .bank-details { text-align: center; font-size: 8px; font-weight: bold; border: 1px solid #000; padding: 2px; margin-bottom: 3px; background-color: #f8f9fa !important; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 3px; font-size: 7px; table-layout: fixed; }
-                th, td { border: 1px solid #000; padding: 2px; text-align: left; overflow: hidden; white-space: nowrap; }
-                th { background-color: #f2f2f2 !important; font-weight: bold; text-align: center; }
-                td { text-align: center; }
-                .student-name-value { font-weight: bold; text-align: left !important; }
-                .value-cell { font-weight: bold; text-align: center !important; }
-                .due-date-cell { background-color: #dc3545 !important; color: white !important; font-weight: bold; text-align: center !important; font-size: 9px !important; vertical-align: middle !important;}
-                .total-payable-section { display: flex; justify-content: space-between; margin-top: auto; font-size: 8px; gap: 3px;}
-                .total-payable-section div { border: 1px solid #000; padding: 3px; font-weight: bold; background-color: #f8f9fa !important; flex: 1; text-align: center; }
-                .bank-fill-note { font-size: 6px; text-align: right; margin-top: 3px; font-style: italic; }
-                .late-payment-note { font-size: 7px; margin-top: 2px; padding: 2px; border: 1px solid #000; font-weight: bold; text-align: left; }
-                .footer-note { font-size: 7px; margin-top: auto; border-top: 1px solid #000; padding-top: 3px; text-align: left; }
-            </style></head>
-            <body><div class="voucher-page"><div class="voucher-col">${parentCopy}</div><div class="voucher-col">${hostelCopy}</div><div class="voucher-col">${bankCopy}</div></div></body></html>
+        <html><head><title>Fee Slip - MSST</title>
+        <style>
+            @page { size: A4 landscape; margin: 8mm; } 
+            body { margin: 0; padding: 0; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff; }
+            
+            .voucher-page { display: flex; flex-direction: row; justify-content: space-between; width: 100%; height: 185mm; box-sizing: border-box; }
+            .voucher-col { width: 32.5%; height: 100%; box-sizing: border-box; padding: 3px; } 
+            
+            .modern-voucher { position: relative !important; background: #ffffff; border: 1.5px solid #000; border-radius: 8px; overflow: hidden; height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
+            .mv-header { display: flex; align-items: center; padding: 8px 10px; border-bottom: 2px solid #000; background: #f8f9fa !important; gap: 8px; }
+            .mv-logo { width: 38px; height: 38px; object-fit: contain; flex-shrink: 0; }
+            .mv-school-text { flex: 1; line-height: 1.1; min-width: 0; }
+            .mv-school-name { font-size: 9px; font-weight: 900; color: #000; text-transform: uppercase; margin-bottom: 2px; }
+            .mv-school-address { font-size: 7px; color: #333; }
+            .mv-copy-badge { background: #e9ecef !important; color: #000; font-size: 9px; font-weight: bold; padding: 4px 6px; border: 1px solid #000; border-radius: 4px; text-align: center; flex-shrink: 0; width: 85px; box-sizing: border-box;}
+            .mv-fbise { font-size: 7px; display: block; margin-bottom: 2px; font-weight: normal; }
+            
+            .mv-bank-banner { background: #f1f3f5 !important; text-align: center; font-size: 8px; font-weight: bold; padding: 4px; color: #000; border-bottom: 1px solid #000; }
+            
+            .mv-student-info { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 10px; border-bottom: 1px dashed #000; }
+            .mv-info-box { display: flex; flex-direction: column; }
+            .mv-info-label { font-size: 6.5px; color: #555; font-weight: bold; text-transform: uppercase; margin-bottom: 1px; }
+            .mv-info-value { font-size: 9px; color: #000; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            
+            .mv-due-banner { background: #000 !important; color: white !important; display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; }
+            .mv-due-label { font-size: 8.5px; font-weight: bold; letter-spacing: 1px;}
+            .mv-due-date { font-size: 11px; font-weight: 900; }
+            
+            .mv-fee-table { width: 100%; border-collapse: collapse; margin: 0; }
+            .mv-fee-table th { background: #f8f9fa !important; font-size: 7px; color: #000; padding: 5px 10px; text-align: left; border-top: 1px solid #000; border-bottom: 1px solid #000; text-transform: uppercase; }
+            .mv-fee-table th.text-end { text-align: right; }
+            .mv-fee-table td { padding: 4px 10px; font-size: 8.5px; color: #000; border-bottom: 1px dashed #ccc; }
+            .mv-fee-table td.text-end { text-align: right; font-weight: bold; }
+            
+            .mv-totals { padding: 8px 10px; background: #f8f9fa !important; border-top: 1.5px solid #000; }
+            .mv-total-row { display: flex; justify-content: space-between; margin-bottom: 3px; align-items: center; font-size: 8px; color: #000; }
+            .mv-total-row.grand { font-size: 10.5px; font-weight: 900; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #000; }
+            
+            .mv-footer { padding: 8px 10px; font-size: 7.5px; color: #000; line-height: 1.3; margin-top: auto; border-top: 1px solid #000; }
+            .mv-warning { font-weight: bold; }
+
+            /* BULLETPROOF PRINT POSITIONING FOR WATERMARK */
+            .mv-paid-stamp { 
+                display: block !important;
+                position: absolute !important; 
+                top: 45% !important; 
+                left: 50% !important; 
+                transform: translate(-50%, -50%) rotate(-35deg) !important; 
+                font-size: 3.5rem !important; 
+                font-weight: 900 !important; 
+                color: rgba(40, 167, 69, 0.25) !important; 
+                border: 4px solid rgba(40, 167, 69, 0.25) !important; 
+                padding: 10px 20px !important; 
+                border-radius: 12px !important; 
+                pointer-events: none !important; 
+                z-index: 999 !important; 
+                text-transform: uppercase !important; 
+                letter-spacing: 6px !important; 
+                text-align: center !important;
+                background: transparent !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        </style></head>
+        <body><div class="voucher-page"><div class="voucher-col">${parentCopy}</div><div class="voucher-col">${hostelCopy}</div><div class="voucher-col">${bankCopy}</div></div></body></html>
         `);
-        printWindow.document.close(); printWindow.focus(); setTimeout(() => { printWindow.print(); printWindow.close(); }, 300);
+        printWindow.document.close(); 
+        printWindow.focus(); 
+        setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
     }
     </script>
 </body>

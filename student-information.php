@@ -11,6 +11,119 @@ if (!isset($_SESSION['admin_logged_in'])) {
 // Set admin details from the session.
 $admin_name = $_SESSION['admin_name'] ?? 'Admin';
 
+// --- NEW: HANDLE AJAX & POST ACTIONS ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    
+    // Handle Delete Student
+    if ($_POST['action'] === 'delete_student') {
+        header('Content-Type: application/json');
+        try {
+            $student_id = intval($_POST['id']);
+            
+            $pdo->beginTransaction();
+            
+            // Safely delete from dependent tables first to prevent Foreign Key crashes
+            $pdo->prepare("DELETE FROM student_details WHERE user_id = ?")->execute([$student_id]);
+            $pdo->prepare("DELETE FROM student_attendance WHERE student_id = ?")->execute([$student_id]);
+            $pdo->prepare("DELETE FROM student_scores WHERE student_id = ?")->execute([$student_id]);
+            $pdo->prepare("DELETE FROM fee_slips WHERE student_id = ?")->execute([$student_id]);
+            
+            // Finally, delete the main user account
+            $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+            $stmt->execute([$student_id]);
+            
+            $pdo->commit();
+            echo json_encode(['success' => true, 'message' => 'Student successfully deleted!']);
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        exit;
+    }
+    // Handle Update Student (Profile & Academics)
+    if ($_POST['action'] === 'update_student') {
+        header('Content-Type: application/json');
+        try {
+            $student_id = intval($_POST['id']);
+            
+            $pdo->beginTransaction();
+            
+            // 1. Update the main users table (Name & Status)
+            $stmt1 = $pdo->prepare("UPDATE users SET full_name = ?, status = ? WHERE id = ?");
+            $stmt1->execute([$_POST['full_name'], $_POST['status'], $student_id]);
+            
+            // 2. Update the student_details table (Everything else)
+            $stmt2 = $pdo->prepare("
+                UPDATE student_details SET 
+                    gender = ?, date_of_birth = ?, cell_no = ?, phone_no = ?, 
+                    domicile_district = ?, previous_school = ?, address = ?, postal_address = ?,
+                    class_id = ?, section_id = ?, fee_category = ?,
+                    father_name = ?, mother_name = ?, family_monthly_income = ?, guardian_name = ?, 
+                    father_cnic = ?, mother_cnic = ?, father_occupation = ?,
+                    physical_deformity = ?, awards = ?, extracurricular_expertise = ?, special_care_areas = ?
+                WHERE user_id = ?
+            ");
+            
+            $stmt2->execute([
+                $_POST['gender'], 
+                empty($_POST['date_of_birth']) ? null : $_POST['date_of_birth'], 
+                $_POST['cell_no'], 
+                $_POST['phone_no'],
+                $_POST['domicile_district'], 
+                $_POST['previous_school'], 
+                $_POST['address'], 
+                $_POST['postal_address'],
+                empty($_POST['class_id']) ? null : $_POST['class_id'], 
+                empty($_POST['section_id']) ? null : $_POST['section_id'], 
+                $_POST['fee_category'],
+                $_POST['father_name'], 
+                $_POST['mother_name'], 
+                empty($_POST['family_monthly_income']) ? 0 : $_POST['family_monthly_income'], 
+                $_POST['guardian_name'],
+                $_POST['father_cnic'], 
+                $_POST['mother_cnic'], 
+                $_POST['father_occupation'],
+                $_POST['physical_deformity'], 
+                $_POST['awards'], 
+                $_POST['extracurricular_expertise'], 
+                $_POST['special_care_areas'],
+                $student_id
+            ]);
+            
+            $pdo->commit();
+            echo json_encode(['success' => true, 'message' => 'Student profile updated successfully!']);
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            echo json_encode(['success' => false, 'message' => 'Database Error: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+    // Handle Export CSV
+    if ($_POST['action'] === 'export_students') {
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="students_export_' . date('Ymd') . '.csv"');
+        $output = fopen('php://output', 'w');
+        fputcsv($output, ['Student ID', 'Full Name', 'Father Name', 'Email', 'Phone', 'Class', 'Section', 'Fee Program', 'Status']);
+        
+        $stmt = $pdo->query("
+            SELECT u.user_id_string, u.full_name, sd.father_name, u.email, sd.cell_no, c.class_name, sec.section_name, sd.fee_category, u.status
+            FROM users u
+            JOIN roles r ON u.role_id = r.id
+            LEFT JOIN student_details sd ON u.id = sd.user_id
+            LEFT JOIN classes c ON sd.class_id = c.id
+            LEFT JOIN sections sec ON sd.section_id = sec.id
+            WHERE r.role_name = 'Student'
+            ORDER BY c.class_name, sec.section_name, u.full_name
+        ");
+        
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            fputcsv($output, $row);
+        }
+        fclose($output);
+        exit;
+    }
+}
+
 try {
     // Fetch all students with ALL their details from the database
     $stmt = $pdo->query(
@@ -583,7 +696,7 @@ try {
         saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
         
         try {
-            const response = await fetch('api_students.php', {
+            const response = await fetch('student-information.php', {
                 method: 'POST',
                 body: formData
             });
@@ -614,7 +727,7 @@ try {
         importBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importing...';
         
         try {
-            const response = await fetch('api_students.php', { method: 'POST', body: formData });
+            const response = await fetch('student-information.php', { method: 'POST', body: formData });
             const result = await response.json();
             
             if (response.ok && result.success) {
@@ -644,7 +757,7 @@ try {
             formData.append('action', 'delete_student');
             formData.append('id', id);
             
-            const response = await fetch('api_students.php', { method: 'POST', body: formData });
+            const response = await fetch('student-information.php', { method: 'POST', body: formData });
             const result = await response.json();
             
             if (response.ok && result.success) {
@@ -666,7 +779,7 @@ try {
         showAlert('Preparing student data for export...', 'info');
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = 'api_students.php';
+        form.action = 'student-information.php';
         
         const actionInput = document.createElement('input');
         actionInput.type = 'hidden';

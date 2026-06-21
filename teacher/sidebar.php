@@ -124,6 +124,7 @@
         }
 
         .footer {
+            z-index:99;
             text-align: center;
             padding: 1rem;
             background: white;
@@ -181,7 +182,7 @@
 <ul>
     <li><a href="dashboard.php" class=""><i class="fas fa-tachometer-alt"></i> <span>Dashboard</span></a></li>
     <li><a href="profile.php"><i class="fas fa-user"></i> <span>Profile</span></a></li>
-    <li><a href="my-courses.php"><i class="fas fa-book"></i> <span>My Courses</span></a></li>
+    <!-- <li><a href="my-courses.php"><i class="fas fa-book"></i> <span>My Courses</span></a></li> -->
     <li><a href="student_list.php"><i class="fas fa-clipboard-list"></i> <span>Student List</span></a></li>
     <!-- <li><a href="assignments.php"><i class="fas fa-chart-bar"></i> <span>Assignments</span></a></li> -->
     <!-- <li><a href="grades.php"><i class="fas fa-receipt"></i> <span>Grades</span></a></li> -->
@@ -190,8 +191,8 @@
     <li><a href="attendance-report.php"><i class="fas fa-calendar-check"></i> <span>Attendance Report</span></a></li>
     
     <li><a href="notice.php"><i class="fas fa-bullhorn"></i> <span>Notices</span></a></li>
-    <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>
-    <li><a href="performance-reports.php"><i class="fas fa-life-ring"></i> <span>Performance Reports</span></a></li>
+    <!-- <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>
+    <li><a href="performance-reports.php"><i class="fas fa-life-ring"></i> <span>Performance Reports</span></a></li> -->
     <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>
 </ul>
         
