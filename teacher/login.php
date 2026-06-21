@@ -1,4 +1,4 @@
-<?php
+<!-- <?php
 session_start();
 require_once '../config/db_config.php';
 
@@ -154,6 +154,68 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <i class="fas fa-sign-in-alt"></i> Login
                 </button>
             </form>
+        </div>
+    </div>
+</body>
+</html> -->
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Portal | Coming Soon</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f8f9fc 0%, #e3e6f0 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .coming-soon-card {
+            background: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            padding: 40px 30px;
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+            border-top: 5px solid #1cc88a; /* Teacher Green */
+        }
+        .logo { width: 80px; margin-bottom: 20px; }
+        .icon-container {
+            font-size: 3.5rem; color: #1cc88a; margin-bottom: 20px;
+            display: inline-block; animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float { 
+            0% { transform: translateY(0px); } 
+            50% { transform: translateY(-10px); } 
+            100% { transform: translateY(0px); } 
+        }
+    </style>
+</head>
+<body>
+    <div class="coming-soon-card">
+        <img src="../assets/images/msst-logo.png" alt="MSST Logo" class="logo" onerror="this.src='https://ui-avatars.com/api/?name=MSST&background=1cc88a&color=fff&rounded=true&size=80'">
+        
+        <!-- <div class="icon-container"><i class="fas fa-tools"></i></div> -->
+        
+        <h2 class="fw-bold text-dark mb-1">Teacher Portal</h2>
+        <h5 class="text-success mb-3">Coming Soon</h5>
+        
+        <p class="text-muted mb-4 small">
+            We are building a brand new dashboard for our faculty. The development team is actively working on it to provide you with the best tools. Thank you for your patience!
+        </p>
+        
+        <div class="d-flex justify-content-center gap-2">
+            <a href="#" class="btn btn-success rounded-pill px-4 shadow-sm" onclick="location.reload();"><i class="fas fa-sync-alt me-2"></i>Refresh</a>
         </div>
     </div>
 </body>
