@@ -1,4 +1,4 @@
-<!-- <?php
+<?php
 session_start();
 require_once '../config/db_config.php';
 
@@ -157,10 +157,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
     </div>
 </body>
-</html> -->
+</html>
 
 
-
+<!-- 
 
 <!DOCTYPE html>
 <html lang="en">
@@ -205,7 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <div class="coming-soon-card">
         <img src="../assets/images/msst-logo.png" alt="MSST Logo" class="logo" onerror="this.src='https://ui-avatars.com/api/?name=MSST&background=1cc88a&color=fff&rounded=true&size=80'">
         
-        <!-- <div class="icon-container"><i class="fas fa-tools"></i></div> -->
+    
         
         <h2 class="fw-bold text-dark mb-1">Teacher Portal</h2>
         <h5 class="text-success mb-3">Coming Soon</h5>
@@ -219,4 +219,4 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
     </div>
 </body>
-</html>
+</html> -->

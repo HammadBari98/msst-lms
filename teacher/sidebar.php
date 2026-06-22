@@ -185,10 +185,13 @@
     <!-- <li><a href="my-courses.php"><i class="fas fa-book"></i> <span>My Courses</span></a></li> -->
     <li><a href="student_list.php"><i class="fas fa-clipboard-list"></i> <span>Student List</span></a></li>
     <!-- <li><a href="assignments.php"><i class="fas fa-chart-bar"></i> <span>Assignments</span></a></li> -->
+    <li><a href="lesson-plans.php"><i class="fas fa-chart-bar"></i> <span>Lesson Plans</span></a></li>
     <!-- <li><a href="grades.php"><i class="fas fa-receipt"></i> <span>Grades</span></a></li> -->
     <li><a href="manage-scores.php"><i class="fas fa-receipt"></i> <span>Manage Scores</span></a></li>
     <li><a href="attendance-management.php"><i class="fas fa-calendar-alt"></i> <span>Attendance Management</span></a></li>
     <li><a href="attendance-report.php"><i class="fas fa-calendar-check"></i> <span>Attendance Report</span></a></li>
+    <li><a href="online-classes.php"><i class="fas fa-chart-bar"></i> <span>Online Classes</span></a></li>
+    <li><a href="study-materials.php"><i class="fas fa-chart-bar"></i> <span>Study Materials</span></a></li>
     
     <li><a href="notice.php"><i class="fas fa-bullhorn"></i> <span>Notices</span></a></li>
     <!-- <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>

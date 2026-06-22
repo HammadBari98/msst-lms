@@ -1,4 +1,4 @@
-<!-- <?php
+<?php
 session_start();
 // Make sure the path to your db_config.php is correct
 // If login.php is inside a 'student' folder, this path should be correct.
@@ -50,6 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 }
 ?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -208,10 +210,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
     </div>
 </body>
-</html> -->
+</html> 
 
 
-
+<!-- 
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -255,7 +257,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <div class="coming-soon-card">
         <img src="../assets/images/msst-logo.png" alt="MSST Logo" class="logo" onerror="this.src='https://ui-avatars.com/api/?name=MSST&background=906833&color=fff&rounded=true&size=80'">
         
-        <!-- <div class="icon-container"><i class="fas fa-laptop-code"></i></div> -->
         
         <h2 class="fw-bold text-dark mb-1">Student Portal</h2>
         <h5 class="mb-3" style="color: #906833;">Update in Progress</h5>
@@ -269,4 +270,4 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
     </div>
 </body>
-</html>
+</html> -->

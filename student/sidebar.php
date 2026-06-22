@@ -195,8 +195,14 @@
     <li><a href="enrolled_subjects.php"><i class="fas fa-book"></i> <span>Courses</span></a></li>
     <!-- <li><a href="assignments.php"><i class="fas fa-clipboard-list"></i> <span>Assignments</span></a></li>
     <li><a href="grades.php"><i class="fas fa-chart-bar"></i> <span>Grades</span></a></li> -->
+    <li><a href="lesson-plans.php"><i class="fas fa-chart-bar"></i> <span>Lesson Plans</span></a></li>
+    <li><a href="study-materials.php"><i class="fas fa-chart-bar"></i> <span>Study Materials</span></a></li>
+
     <li><a href="my-scores.php"><i class="fas fa-chart-bar"></i> <span>My Scores</span></a></li>
     <li><a href="attendance.php"><i class="fas fa-calendar-check"></i> <span>Attendance</span></a></li>
+
+    <li><a href="online-classes.php"><i class="fas fa-chart-bar"></i> <span>Online Classes</span></a></li>
+
     <li><a href="fee-detail.php"><i class="fas fa-receipt"></i> <span>Fee Detail</span></a></li>
     <li><a href="notice.php"><i class="fas fa-bullhorn"></i> <span>Notices</span></a></li>
     <!-- <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li> -->
