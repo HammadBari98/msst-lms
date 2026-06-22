@@ -30,6 +30,27 @@ if (!$current_user_db_id && isset($_SESSION['user_id']) && is_numeric($_SESSION[
 }
 
 // =======================================================
+// 1.5 AUTO-PATCHER (In case student logs in before teacher)
+// =======================================================
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS online_classes (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            teacher_id INT NOT NULL,
+            class_id INT NOT NULL,
+            subject_topic VARCHAR(255) NOT NULL,
+            platform VARCHAR(50) NOT NULL,
+            meeting_link VARCHAR(500) NOT NULL,
+            meeting_password VARCHAR(100) DEFAULT '',
+            class_date DATE NOT NULL,
+            start_time TIME NOT NULL,
+            duration_minutes INT DEFAULT 45,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ");
+} catch (PDOException $e) { /* Ignore if exists */ }
+
+// =======================================================
 // 2. FETCH STUDENT'S SCHEDULED ONLINE CLASSES
 // =======================================================
 $student_class_id = 0;
@@ -57,7 +78,8 @@ if ($current_user_db_id > 0) {
             $scheduled_classes = $stmt_plans->fetchAll(PDO::FETCH_ASSOC);
         }
     } catch (PDOException $e) {
-        $error_message = "A database error occurred while fetching your live class schedule.";
+        // We will output the exact error to help debug if it fails again
+        $error_message = "Database Error: " . $e->getMessage();
     }
 }
 
@@ -129,7 +151,7 @@ function getPlatformBadge($platform) {
                         <h5 class="fw-bold text-dark">Class Not Assigned</h5>
                         <p class="text-muted mb-0">You have not been assigned to a specific class yet. Please contact the administration.</p>
                     </div>
-                <?php elseif (empty($scheduled_classes)): ?>
+                <?php elseif (empty($scheduled_classes) && !$error_message): ?>
                     <div class="text-center p-5 bg-white rounded border border-light shadow-sm">
                         <i class="fas fa-coffee text-muted fa-4x mb-3 opacity-25"></i>
                         <h5 class="fw-bold text-dark">No Upcoming Classes</h5>
