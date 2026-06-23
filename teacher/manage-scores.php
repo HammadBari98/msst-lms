@@ -2,7 +2,6 @@
 session_start();
 require_once '../config/db_config.php';
 
-// Check if teacher is logged in
 if (!isset($_SESSION['teacher_logged_in'])) {
     header('Location: ../login.php');
     exit();
@@ -10,87 +9,121 @@ if (!isset($_SESSION['teacher_logged_in'])) {
 
 $teacher_session_id = $_SESSION['teacher_id'];
 $teacher_name = $_SESSION['teacher_name'];
-$is_admin = $_SESSION['is_admin'] ?? false;
 
-// --- BUG FIX: Convert String ID (e.g. TEA-001) to Integer ID ---
+// --- Convert String ID to Integer ID ---
 $stmt_get_id = $pdo->prepare("SELECT id FROM users WHERE id = ? OR user_id_string = ? LIMIT 1");
 $stmt_get_id->execute([$teacher_session_id, $teacher_session_id]);
 $teacher_id = $stmt_get_id->fetchColumn();
-// ---------------------------------------------------------------
+
+// =======================================================
+// AUTO-PATCHER: Dynamic Assessment Types (Core Protected)
+// =======================================================
+$core_types = ['Monthly Test', 'Mid Term', 'Final Exam'];
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS assessment_types (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(100) NOT NULL,
+            teacher_id INT NOT NULL,
+            is_core TINYINT(1) DEFAULT 0
+        )
+    ");
+    // Seed core types if table is empty for this teacher
+    $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM assessment_types WHERE teacher_id = ?");
+    $stmt_check->execute([$teacher_id]);
+    if ($stmt_check->fetchColumn() == 0) {
+        $stmt_insert = $pdo->prepare("INSERT INTO assessment_types (name, teacher_id, is_core) VALUES (?, ?, 1)");
+        foreach ($core_types as $core) { $stmt_insert->execute([$core, $teacher_id]); }
+        // Add a default custom one
+        $pdo->prepare("INSERT INTO assessment_types (name, teacher_id, is_core) VALUES ('Class Assignment', ?, 0)")->execute([$teacher_id]);
+    }
+} catch (PDOException $e) { /* Ignore */ }
 
 // Handle Form Submissions
 $msg = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        
-        // CREATE NEW ASSESSMENT
-        if ($_POST['action'] === 'create_assessment') {
-            try {
-                $stmt = $pdo->prepare("INSERT INTO assessments (teacher_id, class_id, subject_name, assessment_type, title, total_marks, assessment_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([
-                    $teacher_id,
-                    $_POST['class_id'],
-                    $_POST['subject_name'],
-                    $_POST['assessment_type'],
-                    $_POST['title'],
-                    $_POST['total_marks'],
-                    $_POST['assessment_date']
-                ]);
-                $msg = '<div class="alert alert-success">Assessment created successfully!</div>';
-            } catch (Exception $e) {
-                $msg = '<div class="alert alert-danger">Error: ' . $e->getMessage() . '</div>';
-            }
-        }
-        
-        // SAVE SCORES
-        if ($_POST['action'] === 'save_scores') {
-            try {
-                $assessment_id = $_POST['assessment_id'];
-                $pdo->beginTransaction();
-                
-                // Delete existing scores for this assessment to replace them (or update)
-                $stmt = $pdo->prepare("DELETE FROM student_scores WHERE assessment_id = ?");
-                $stmt->execute([$assessment_id]);
-                
-                $insert_stmt = $pdo->prepare("INSERT INTO student_scores (assessment_id, student_id, marks_obtained, remarks) VALUES (?, ?, ?, ?)");
-                
-                if(isset($_POST['marks']) && is_array($_POST['marks'])) {
-                    foreach ($_POST['marks'] as $student_id => $marks) {
-                        if ($marks !== '') { // Only save if marks are entered
-                            $remarks = $_POST['remarks'][$student_id] ?? '';
-                            $insert_stmt->execute([$assessment_id, $student_id, $marks, $remarks]);
-                        }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    
+    // --- MANAGE DYNAMIC TYPES ---
+    if ($_POST['action'] === 'add_type') {
+        try {
+            $pdo->prepare("INSERT INTO assessment_types (name, teacher_id, is_core) VALUES (?, ?, 0)")->execute([trim($_POST['type_name']), $teacher_id]);
+            $msg = '<div class="alert alert-success">Assessment type added!</div>';
+        } catch (Exception $e) { $msg = '<div class="alert alert-danger">Error adding type.</div>'; }
+    }
+    elseif ($_POST['action'] === 'delete_type') {
+        try {
+            // Extra security: Only allow deleting if is_core = 0
+            $pdo->prepare("DELETE FROM assessment_types WHERE id = ? AND teacher_id = ? AND is_core = 0")->execute([$_POST['type_id'], $teacher_id]);
+            $msg = '<div class="alert alert-success">Assessment type deleted!</div>';
+        } catch (Exception $e) { $msg = '<div class="alert alert-danger">Cannot delete core types.</div>'; }
+    }
+    
+    // --- CREATE NEW ASSESSMENT ---
+    elseif ($_POST['action'] === 'create_assessment') {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO assessments (teacher_id, class_id, subject_name, assessment_type, title, total_marks, assessment_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                $teacher_id, $_POST['class_id'], $_POST['subject_name'],
+                $_POST['assessment_type'], $_POST['title'], $_POST['total_marks'], $_POST['assessment_date']
+            ]);
+            $msg = '<div class="alert alert-success">Assessment created successfully!</div>';
+        } catch (Exception $e) { $msg = '<div class="alert alert-danger">Error: ' . $e->getMessage() . '</div>'; }
+    }
+
+    // --- UPDATE ASSESSMENT DETAILS ---
+    elseif ($_POST['action'] === 'update_assessment') {
+        try {
+            $stmt = $pdo->prepare("UPDATE assessments SET class_id = ?, subject_name = ?, assessment_type = ?, title = ?, total_marks = ?, assessment_date = ? WHERE id = ? AND teacher_id = ?");
+            $stmt->execute([
+                $_POST['class_id'], $_POST['subject_name'], $_POST['assessment_type'],
+                $_POST['title'], $_POST['total_marks'], $_POST['assessment_date'],
+                $_POST['assessment_id'], $teacher_id
+            ]);
+            $msg = '<div class="alert alert-success alert-dismissible shadow-sm">Assessment details updated successfully!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+        } catch (Exception $e) { $msg = '<div class="alert alert-danger">Error: ' . $e->getMessage() . '</div>'; }
+    }
+    
+    // --- SAVE SCORES ---
+    elseif ($_POST['action'] === 'save_scores') {
+        try {
+            $assessment_id = $_POST['assessment_id'];
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare("DELETE FROM student_scores WHERE assessment_id = ?");
+            $stmt->execute([$assessment_id]);
+            
+            $insert_stmt = $pdo->prepare("INSERT INTO student_scores (assessment_id, student_id, marks_obtained, remarks) VALUES (?, ?, ?, ?)");
+            if(isset($_POST['marks']) && is_array($_POST['marks'])) {
+                foreach ($_POST['marks'] as $student_id => $marks) {
+                    if ($marks !== '') { 
+                        $remarks = $_POST['remarks'][$student_id] ?? '';
+                        $insert_stmt->execute([$assessment_id, $student_id, $marks, $remarks]);
                     }
                 }
-                
-                $pdo->commit();
-                $msg = '<div class="alert alert-success">Scores saved successfully!</div>';
-            } catch (Exception $e) {
-                $pdo->rollBack();
-                $msg = '<div class="alert alert-danger">Error saving scores: ' . $e->getMessage() . '</div>';
             }
+            $pdo->commit();
+            $msg = '<div class="alert alert-success">Scores saved successfully!</div>';
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            $msg = '<div class="alert alert-danger">Error saving scores: ' . $e->getMessage() . '</div>';
         }
-        
-        // DELETE ASSESSMENT
-        if ($_POST['action'] === 'delete_assessment') {
-            try {
-                $stmt = $pdo->prepare("DELETE FROM assessments WHERE id = ? AND teacher_id = ?");
-                $stmt->execute([$_POST['assessment_id'], $teacher_id]);
-                $msg = '<div class="alert alert-success">Assessment deleted successfully!</div>';
-            } catch (Exception $e) {
-                $msg = '<div class="alert alert-danger">Error: ' . $e->getMessage() . '</div>';
-            }
-        }
+    }
+    
+    // --- DELETE ASSESSMENT ---
+    elseif ($_POST['action'] === 'delete_assessment') {
+        try {
+            $pdo->prepare("DELETE FROM assessments WHERE id = ? AND teacher_id = ?")->execute([$_POST['assessment_id'], $teacher_id]);
+            $msg = '<div class="alert alert-success">Assessment deleted successfully!</div>';
+        } catch (Exception $e) { $msg = '<div class="alert alert-danger">Error: ' . $e->getMessage() . '</div>'; }
     }
 }
 
+// Fetch dynamic assessment types for the dropdown
+$stmt_types = $pdo->prepare("SELECT * FROM assessment_types WHERE teacher_id = ? ORDER BY is_core DESC, name ASC");
+$stmt_types->execute([$teacher_id]);
+$assessment_types = $stmt_types->fetchAll(PDO::FETCH_ASSOC);
+
 // Get Teacher's Assigned Classes
-$stmt_classes = $pdo->prepare("
-    SELECT c.id, c.class_name 
-    FROM classes c
-    JOIN teacher_class_assignments tca ON c.id = tca.class_id
-    WHERE tca.teacher_user_id = ?
-");
+$stmt_classes = $pdo->prepare("SELECT c.id, c.class_name FROM classes c JOIN teacher_class_assignments tca ON c.id = tca.class_id WHERE tca.teacher_user_id = ?");
 $stmt_classes->execute([$teacher_id]);
 $assigned_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 
@@ -106,7 +139,6 @@ $stmt_assessments = $pdo->prepare("
 ");
 $stmt_assessments->execute([$teacher_id]);
 $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -116,35 +148,14 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
     <title>Manage Scores | Teacher Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-    
+    <link rel="stylesheet" href="../style.css"> 
     <style>
-        :root {
-            --primary: #007bff;
-            --light-bg: #f8f9fc;
-            --dark-text: #343a40;
-        }
+        :root { --light-bg: #f8f9fc; }
         body { font-family: 'Segoe UI', sans-serif; background-color: var(--light-bg); overflow-x: hidden; }
-        .sidebar { width: 250px; height: 100vh; position: fixed; top: 0; left: 0; background: var(--primary); color: white; transition: all 0.3s; z-index: 1000; }
-        .sidebar.collapsed { width: 70px; }
-        .sidebar .brand { padding: 1rem; font-size: 1.2rem; font-weight: bold; text-align: center; }
-        .sidebar.collapsed .brand span { display: none; }
-        .sidebar ul { list-style: none; padding: 0; }
-        .sidebar ul li a { color: rgba(255, 255, 255, 0.8); padding: 0.75rem 1rem; display: flex; align-items: center; text-decoration: none; transition: background 0.2s; }
-        .sidebar ul li a:hover, .sidebar ul li a.active { background: rgba(255, 255, 255, 0.1); color: white; }
-        .sidebar ul li a i { width: 20px; text-align: center; margin-right: 0.75rem; }
-        .sidebar.collapsed ul li a span { display: none; }
-        #main-content { margin-left: 250px; transition: all 0.3s; min-height: 100vh; display: flex; flex-direction: column; }
-        .topbar { height: 70px; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 0 1rem; }
-        .content-wrapper { flex: 1; padding: 1.5rem; }
+        #main-content { display: flex; flex-direction: column; min-height: 100vh; }
+        .content-wrapper { flex-grow: 1; }
         .card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); margin-bottom: 1.5rem; }
-        @media (max-width: 768px) {
-            .sidebar { left: -250px; }
-            .sidebar.show { left: 0; }
-            #main-content { margin-left: 0; }
-            #main-content.show-sidebar { margin-left: 250px; }
-        }
     </style>
 </head>
 <body>
@@ -152,25 +163,23 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
     <?php include 'sidebar.php' ?>
 
     <div id="main-content">
-        <nav class="topbar">
-            <button class="btn" id="sidebarToggle"><i class="fas fa-bars"></i></button>
-            <div class="ms-auto"><i class="fas fa-user-circle me-2"></i><span><?= htmlspecialchars($teacher_name) ?></span></div>
-        </nav>
+        <?php include 'header.php' ?>
 
-        <div class="content-wrapper">
+        <div class="content-wrapper p-4">
             <div class="container-fluid">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h1 class="h3 text-gray-800">Manage Scores & Assessments</h1>
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createAssessmentModal">
+                    <h1 class="h3 text-gray-800 fw-bold"><i class="fas fa-edit text-primary me-2"></i>Manage Scores & Assessments</h1>
+                    <button class="btn btn-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#createAssessmentModal">
                         <i class="fas fa-plus me-2"></i>New Assessment
                     </button>
                 </div>
 
                 <?= $msg ?>
 
-                <div class="card shadow">
-                    <div class="card-header bg-white py-3">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                         <h6 class="m-0 font-weight-bold text-primary">Your Assessments</h6>
+                        <a href="award-list.php" class="btn btn-sm btn-success fw-bold"><i class="fas fa-clipboard-list me-1"></i> View Award Lists</a>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
@@ -188,30 +197,36 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                                 <tbody>
                                     <?php foreach ($assessments as $asm): ?>
                                     <tr>
-                                        <td><?= date('d M Y', strtotime($asm['assessment_date'])) ?></td>
+                                        <td><div class="fw-bold"><?= date('d M Y', strtotime($asm['assessment_date'])) ?></div></td>
                                         <td>
-                                            <strong><?= htmlspecialchars($asm['title']) ?></strong><br>
-                                            <small class="text-muted"><?= htmlspecialchars($asm['subject_name']) ?> (Max: <?= $asm['total_marks'] ?>)</small>
+                                            <strong class="text-primary"><?= htmlspecialchars($asm['title']) ?></strong><br>
+                                            <small class="text-muted"><i class="fas fa-book me-1"></i><?= htmlspecialchars($asm['subject_name']) ?> (Max: <?= $asm['total_marks'] ?>)</small>
                                         </td>
-                                        <td>Class <?= htmlspecialchars($asm['class_name']) ?></td>
-                                        <td><span class="badge bg-info"><?= $asm['assessment_type'] ?></span></td>
+                                        <td><span class="badge bg-secondary">Class <?= htmlspecialchars($asm['class_name']) ?></span></td>
+                                        <td>
+                                            <?php $is_core = in_array($asm['assessment_type'], $core_types); ?>
+                                            <span class="badge <?= $is_core ? 'bg-danger' : 'bg-info text-dark' ?>"><?= htmlspecialchars($asm['assessment_type']) ?></span>
+                                        </td>
                                         <td>
                                             <div class="d-flex align-items-center">
-                                                <span class="me-2"><?= $asm['graded_count'] ?> / <?= $asm['total_students'] ?></span>
+                                                <span class="me-2 fw-bold"><?= $asm['graded_count'] ?> / <?= $asm['total_students'] ?></span>
                                                 <div class="progress flex-grow-1" style="height: 8px;">
                                                     <?php $pct = $asm['total_students'] > 0 ? ($asm['graded_count'] / $asm['total_students']) * 100 : 0; ?>
-                                                    <div class="progress-bar bg-success" style="width: <?= $pct ?>%"></div>
+                                                    <div class="progress-bar <?= $pct == 100 ? 'bg-success' : 'bg-warning' ?>" style="width: <?= $pct ?>%"></div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
-                                            <button class="btn btn-sm btn-success mb-1" onclick="gradeAssessment(<?= $asm['id'] ?>, <?= $asm['class_id'] ?>, '<?= htmlspecialchars($asm['title'], ENT_QUOTES) ?>', <?= $asm['total_marks'] ?>)">
+                                            <button class="btn btn-sm btn-success me-1" onclick="gradeAssessment(<?= $asm['id'] ?>, <?= $asm['class_id'] ?>, '<?= htmlspecialchars($asm['title'], ENT_QUOTES) ?>', <?= $asm['total_marks'] ?>)">
                                                 <i class="fas fa-edit"></i> Grade
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-primary me-1 mb-1 shadow-sm" onclick="openEditModal(<?= $asm['id'] ?>, <?= $asm['class_id'] ?>, '<?= htmlspecialchars($asm['subject_name'], ENT_QUOTES) ?>', '<?= htmlspecialchars($asm['assessment_type'], ENT_QUOTES) ?>', '<?= htmlspecialchars($asm['title'], ENT_QUOTES) ?>', <?= $asm['total_marks'] ?>, '<?= $asm['assessment_date'] ?>')" title="Edit Assessment Info">
+                                                <i class="fas fa-pen"></i> Edit
                                             </button>
                                             <form method="post" class="d-inline" onsubmit="return confirm('Delete this assessment and ALL associated scores?');">
                                                 <input type="hidden" name="action" value="delete_assessment">
                                                 <input type="hidden" name="assessment_id" value="<?= $asm['id'] ?>">
-                                                <button type="submit" class="btn btn-sm btn-danger mb-1"><i class="fas fa-trash"></i></button>
+                                                <button type="submit" class="btn btn-sm btn-light text-danger border"><i class="fas fa-trash"></i></button>
                                             </form>
                                         </td>
                                     </tr>
@@ -225,20 +240,21 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <!-- Create Assessment Modal -->
     <div class="modal fade" id="createAssessmentModal" tabindex="-1">
         <div class="modal-dialog">
-            <div class="modal-content">
+            <div class="modal-content border-0 shadow-lg">
                 <form method="post">
                     <input type="hidden" name="action" value="create_assessment">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title">Create New Assessment</h5>
+                    <div class="modal-header bg-primary text-white border-0">
+                        <h5 class="modal-title fw-bold"><i class="fas fa-plus-circle me-2"></i>Create New Assessment</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body bg-light">
                         <div class="mb-3">
-                            <label class="form-label">Select Class</label>
+                            <label class="form-label fw-bold">Select Class <span class="text-danger">*</span></label>
                             <select name="class_id" class="form-select" required>
-                                <option value="">Choose your assigned class...</option>
+                                <option value="" disabled selected>Choose your assigned class...</option>
                                 <?php foreach($assigned_classes as $cls): ?>
                                     <option value="<?= $cls['id'] ?>">Class <?= htmlspecialchars($cls['class_name']) ?></option>
                                 <?php endforeach; ?>
@@ -246,61 +262,169 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Subject</label>
+                                <label class="form-label fw-bold">Subject <span class="text-danger">*</span></label>
                                 <select name="subject_name" id="dynamicSubjectSelect" class="form-select" required>
                                     <option value="">First select a class...</option>
                                 </select>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Type</label>
+                                <label class="form-label fw-bold d-flex justify-content-between align-items-center">
+                                    <span>Type <span class="text-danger">*</span></span>
+                                    <a href="#" class="small text-decoration-none text-primary" data-bs-toggle="modal" data-bs-target="#manageTypesModal" data-bs-dismiss="modal"><i class="fas fa-cog"></i> Manage</a>
+                                </label>
                                 <select name="assessment_type" class="form-select" required>
-                                    <option value="Test">Class Test</option>
-                                    <option value="Assignment">Assignment</option>
-                                    <option value="Exam">Term Exam</option>
+                                    <option value="" disabled selected>Select a type...</option>
+                                    <?php foreach($assessment_types as $type): ?>
+                                        <option value="<?= htmlspecialchars($type['name']) ?>"><?= htmlspecialchars($type['name']) ?> <?= $type['is_core'] ? '⭐' : '' ?></option>
+                                    <?php endforeach; ?>
                                 </select>
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Assessment Title</label>
-                            <input type="text" name="title" class="form-control" placeholder="e.g., Chapter 4 Quiz" required>
+                            <label class="form-label fw-bold">Assessment Title <span class="text-danger">*</span></label>
+                            <input type="text" name="title" class="form-control" placeholder="e.g., Chapter 4 Quiz, or May 2026 Monthly" required>
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Total Marks</label>
+                                <label class="form-label fw-bold">Total Max Marks <span class="text-danger">*</span></label>
                                 <input type="number" name="total_marks" class="form-control" min="1" step="0.5" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Date</label>
+                                <label class="form-label fw-bold">Date <span class="text-danger">*</span></label>
                                 <input type="date" name="assessment_date" class="form-control" value="<?= date('Y-m-d') ?>" required>
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="submit" class="btn btn-primary w-100">Create Assessment</button>
+                    <div class="modal-footer bg-white border-top">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary fw-bold">Create Assessment</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <div class="modal fade" id="gradingModal" tabindex="-1">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <form method="post" id="gradingForm">
-                    <input type="hidden" name="action" value="save_scores">
-                    <input type="hidden" name="assessment_id" id="gradeAssessmentId">
-                    <div class="modal-header bg-success text-white">
-                        <h5 class="modal-title">Grade: <span id="gradeTitleDisplay"></span></h5>
+    <!-- Manage Assessment Types Modal -->
+    <div class="modal fade" id="manageTypesModal" tabindex="-1">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-dark text-white py-2">
+                    <h6 class="modal-title fw-bold"><i class="fas fa-tags me-2"></i>Assessment Types</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body bg-light p-3">
+                    <form method="post" class="mb-3 d-flex gap-2">
+                        <input type="hidden" name="action" value="add_type">
+                        <input type="text" name="type_name" class="form-control form-control-sm border-primary" placeholder="New Type (e.g. Project)" required>
+                        <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-plus"></i></button>
+                    </form>
+                    
+                    <ul class="list-group list-group-flush border rounded shadow-sm">
+                        <?php foreach($assessment_types as $type): ?>
+                            <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+                                <span class="small fw-bold text-dark"><?= htmlspecialchars($type['name']) ?> <?= $type['is_core'] ? '<i class="fas fa-star text-warning" title="Core Exam"></i>' : '' ?></span>
+                                <?php if (!$type['is_core']): ?>
+                                    <form method="post" class="m-0 p-0" onsubmit="return confirm('Delete this custom assessment type?');">
+                                        <input type="hidden" name="action" value="delete_type">
+                                        <input type="hidden" name="type_id" value="<?= $type['id'] ?>">
+                                        <button type="submit" class="btn btn-sm text-danger p-0 m-0"><i class="fas fa-trash-alt"></i></button>
+                                    </form>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary small" style="font-size: 0.65rem;">LOCKED</span>
+                                <?php endif; ?>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+                <div class="modal-footer p-2 bg-white">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#createAssessmentModal" data-bs-dismiss="modal"><i class="fas fa-arrow-left me-1"></i> Back to Assessment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="editAssessmentModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 shadow-lg">
+                <form method="post">
+                    <input type="hidden" name="action" value="update_assessment">
+                    <input type="hidden" name="assessment_id" id="edit_assessment_id">
+                    <div class="modal-header bg-primary text-white border-0">
+                        <h5 class="modal-title fw-bold"><i class="fas fa-pen me-2"></i>Edit Assessment</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body bg-light">
-                        <div class="alert alert-info">Total Marks possible: <strong id="gradeTotalMarks"></strong></div>
-                        <div class="table-responsive">
-                            <table class="table table-bordered bg-white" id="gradingTable" width="100%">
-                                <thead class="table-light">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Select Class <span class="text-danger">*</span></label>
+                            <select name="class_id" id="edit_class_id" class="form-select" required>
+                                <option value="" disabled>Choose your assigned class...</option>
+                                <?php foreach($assigned_classes as $cls): ?>
+                                    <option value="<?= $cls['id'] ?>">Class <?= htmlspecialchars($cls['class_name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Subject <span class="text-danger">*</span></label>
+                                <select name="subject_name" id="edit_subject_name" class="form-select" required>
+                                    <option value="">First select a class...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Type <span class="text-danger">*</span></label>
+                                <select name="assessment_type" id="edit_assessment_type" class="form-select" required>
+                                    <option value="" disabled>Select a type...</option>
+                                    <?php foreach($assessment_types as $type): ?>
+                                        <option value="<?= htmlspecialchars($type['name']) ?>"><?= htmlspecialchars($type['name']) ?> <?= $type['is_core'] ? '⭐' : '' ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Assessment Title <span class="text-danger">*</span></label>
+                            <input type="text" name="title" id="edit_title" class="form-control" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Total Max Marks <span class="text-danger">*</span></label>
+                                <input type="number" name="total_marks" id="edit_total_marks" class="form-control" min="1" step="0.5" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Date <span class="text-danger">*</span></label>
+                                <input type="date" name="assessment_date" id="edit_assessment_date" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-white border-top">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary fw-bold">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grading Modal -->
+    <div class="modal fade" id="gradingModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg">
+                <form method="post" id="gradingForm">
+                    <input type="hidden" name="action" value="save_scores">
+                    <input type="hidden" name="assessment_id" id="gradeAssessmentId">
+                    <div class="modal-header bg-success text-white border-0 py-3">
+                        <h5 class="modal-title fw-bold"><i class="fas fa-clipboard-check me-2"></i>Grade: <span id="gradeTitleDisplay"></span></h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body bg-light p-4">
+                        <div class="alert alert-success bg-success bg-opacity-10 border-success border-opacity-25 shadow-sm text-success fw-bold">
+                            <i class="fas fa-info-circle me-2"></i>Total Marks possible for this assessment: <span id="gradeTotalMarks" class="fs-5"></span>
+                        </div>
+                        <div class="table-responsive bg-white rounded border p-2">
+                            <table class="table table-hover align-middle mb-0" id="gradingTable" width="100%">
+                                <thead class="table-light text-muted small">
                                     <tr>
                                         <th>Student Name</th>
-                                        <th>Marks Obtained</th>
+                                        <th style="width: 25%;">Marks Obtained</th>
                                         <th>Remarks (Optional)</th>
                                     </tr>
                                 </thead>
@@ -310,9 +434,9 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                             </table>
                         </div>
                     </div>
-                    <div class="modal-footer">
+                    <div class="modal-footer bg-white border-top">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-success"><i class="fas fa-save me-2"></i>Save All Scores</button>
+                        <button type="submit" class="btn btn-success fw-bold px-4"><i class="fas fa-save me-2"></i>Save All Scores</button>
                     </div>
                 </form>
             </div>
@@ -321,109 +445,82 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
 
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
     
     <script>
-        // Sidebar Toggle Script
-        const sidebar = document.querySelector('.sidebar');
+        const sidebar = document.getElementById('sidebar');
         const mainContent = document.getElementById('main-content');
         document.getElementById('sidebarToggle').addEventListener('click', () => {
             if (window.innerWidth <= 768) {
                 sidebar.classList.toggle('show');
-                mainContent.classList.toggle('show-sidebar');
+                mainContent.classList.toggle('show');
             } else {
                 sidebar.classList.toggle('collapsed');
                 mainContent.classList.toggle('collapsed');
             }
         });
 
-        // ==========================================
-        // INITIALIZE MAIN TABLE ON PAGE LOAD
-        // ==========================================
         $(document).ready(function() {
             if ($('#assessmentsTable').length) {
                 $('#assessmentsTable').DataTable({
-                    "pageLength": 10,       // Shows 10 assessments per page
-                    "order": [[0, 'desc']], // Automatically sorts by Date (newest first)
-                    "language": {
-                        "emptyTable": "No assessments created yet. Click 'New Assessment' to start."
-                    }
+                    "pageLength": 10,
+                    "order": [[0, 'desc']], 
+                    "language": { "emptyTable": "No assessments created yet." },
+                    "columnDefs": [ { "orderable": false, "targets": 5 } ]
                 });
             }
         });
 
-        // --- The Clever Trick for Cross-Page Submission ---
-        // This intercepts the form submit and attaches the hidden pages' data
         $('#gradingForm').on('submit', function(e) {
             var form = this;
             if ($.fn.DataTable.isDataTable('#gradingTable')) {
                 var dt = $('#gradingTable').DataTable();
-                
-                // Find all inputs in the datatable that are NOT currently visible in the DOM
                 dt.$('input').each(function() {
                     if (!$.contains(document, this)) {
-                        // Append them as hidden inputs to the form right before it submits
-                        $(form).append(
-                            $('<input>')
-                                .attr('type', 'hidden')
-                                .attr('name', this.name)
-                                .val(this.value)
-                        );
+                        $(form).append($('<input>').attr('type', 'hidden').attr('name', this.name).val(this.value));
                     }
                 });
             }
         });
 
-        // Load students for grading via AJAX
         function gradeAssessment(assessmentId, classId, title, totalMarks) {
             $('#gradeAssessmentId').val(assessmentId);
             $('#gradeTitleDisplay').text(title);
             $('#gradeTotalMarks').text(totalMarks);
             
-            // Destroy existing DataTable if the modal was opened previously
             if ($.fn.DataTable.isDataTable('#gradingTable')) {
                 $('#gradingTable').DataTable().destroy();
             }
 
-            $('#studentGradingList').html('<tr><td colspan="3" class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2">Loading students...</p></td></tr>');
-            
+            $('#studentGradingList').html('<tr><td colspan="3" class="text-center py-5"><div class="spinner-border text-success"></div><p class="mt-2 text-muted fw-bold">Fetching Student Register...</p></td></tr>');
             new bootstrap.Modal(document.getElementById('gradingModal')).show();
 
-            // Fetch AJAX data
             $.post('../ajax/get_students_for_grading.php', { assessment_id: assessmentId, class_id: classId }, function(response) {
                 $('#studentGradingList').html(response);
-                
-                // Initialize DataTables ON THE GRADING TABLE
                 if(response.indexOf('colspan="3"') === -1) { 
                     $('#gradingTable').DataTable({
                         "pageLength": 10,
                         "lengthMenu": [10, 25, 50, 100],
-                        "order": [], // Keeps the natural alphabetical order from the DB
+                        "order": [], 
                         "destroy": true,
-                        "scrollY": "45vh",       // Limits table height to 45% of screen
-                        "scrollCollapse": true,  // Enables smooth internal scrolling
-                        "language": {
-                            "search": "Search Student:"
-                        }
+                        "scrollY": "45vh",
+                        "scrollCollapse": true,
+                        "language": { "search": "Search Student:" },
+                        "columnDefs": [ { "orderable": false, "targets": [1, 2] } ]
                     });
                 }
             }).fail(function() {
-                $('#studentGradingList').html('<tr><td colspan="3" class="text-danger text-center py-4">Failed to load students. Ensure AJAX endpoint exists.</td></tr>');
+                $('#studentGradingList').html('<tr><td colspan="3" class="text-danger text-center py-4"><i class="fas fa-exclamation-triangle fa-2x mb-2"></i><br>Failed to load students.</td></tr>');
             });
         }
 
-        // Dynamic Subject Dropdown
         $('select[name="class_id"]').on('change', function() {
-            var selectedText = $(this).find('option:selected').text();
             var subjectSelect = $('#dynamicSubjectSelect');
-            
             if (!$(this).val()) {
                 subjectSelect.html('<option value="">First select a class...</option>');
                 return;
             }
-
             subjectSelect.html('<option value="">Loading subjects...</option>');
 
             $.ajax({
@@ -434,27 +531,93 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                 success: function(subjects) {
                     var options = '<option value="">Choose Subject...</option>';
                     if (subjects && subjects.length > 0) {
-                        subjects.forEach(function(sub) {
-                            options += `<option value="${sub}">${sub}</option>`;
-                        });
+                        subjects.forEach(function(sub) { options += `<option value="${sub}">${sub}</option>`; });
                     } else {
-                        options = '<option value="">No subjects mapped for this class. Please type manually.</option>';
-                        // Fallback if mapping isn't found
                         subjectSelect.replaceWith('<input type="text" name="subject_name" id="dynamicSubjectSelect" class="form-control" placeholder="e.g., Mathematics" required>');
                         return;
                     }
-                    // Re-instate select if it was changed to text input previously
                     if(subjectSelect.is("input")) {
                         subjectSelect.replaceWith('<select name="subject_name" id="dynamicSubjectSelect" class="form-select" required></select>');
                         subjectSelect = $('#dynamicSubjectSelect');
                     }
                     subjectSelect.html(options);
                 },
-                error: function() {
-                    subjectSelect.html('<option value="">Error loading subjects</option>');
+                error: function() { subjectSelect.html('<option value="">Error loading subjects</option>'); }
+            });
+        });
+
+
+        // Open Edit Modal & Populate Data
+        function openEditModal(id, classId, subject, type, title, marks, date) {
+            $('#edit_assessment_id').val(id);
+            $('#edit_class_id').val(classId);
+            $('#edit_assessment_type').val(type);
+            $('#edit_title').val(title);
+            $('#edit_total_marks').val(marks);
+            $('#edit_assessment_date').val(date);
+
+            // Dynamically load the subjects for this class and select the correct one
+            var subjectSelect = $('#edit_subject_name');
+            subjectSelect.html('<option value="">Loading...</option>');
+            
+            $.ajax({
+                url: '../ajax/get_subjects.php',
+                type: 'GET',
+                data: { class_id: classId },
+                dataType: 'json',
+                success: function(subjects) {
+                    var options = '<option value="">Choose Subject...</option>';
+                    if (subjects && subjects.length > 0) {
+                        subjects.forEach(function(sub) {
+                            options += `<option value="${sub}" ${sub === subject ? 'selected' : ''}>${sub}</option>`;
+                        });
+                        if(subjectSelect.is("input")) {
+                            subjectSelect.replaceWith('<select name="subject_name" id="edit_subject_name" class="form-select" required></select>');
+                            subjectSelect = $('#edit_subject_name');
+                        }
+                    } else {
+                        // Fallback to text input if no mapping found
+                        subjectSelect.replaceWith(`<input type="text" name="subject_name" id="edit_subject_name" class="form-control" value="${subject}" required>`);
+                        return;
+                    }
+                    subjectSelect.html(options);
+                }
+            });
+
+            new bootstrap.Modal(document.getElementById('editAssessmentModal')).show();
+        }
+
+        // If the teacher changes the class INSIDE the edit modal, update the subjects dynamically
+        $('#edit_class_id').on('change', function() {
+            var subjectSelect = $('#edit_subject_name');
+            if (!$(this).val()) {
+                subjectSelect.html('<option value="">First select a class...</option>');
+                return;
+            }
+            subjectSelect.html('<option value="">Loading subjects...</option>');
+
+            $.ajax({
+                url: '../ajax/get_subjects.php',
+                type: 'GET',
+                data: { class_id: $(this).val() },
+                dataType: 'json',
+                success: function(subjects) {
+                    var options = '<option value="">Choose Subject...</option>';
+                    if (subjects && subjects.length > 0) {
+                        subjects.forEach(function(sub) { options += `<option value="${sub}">${sub}</option>`; });
+                    } else {
+                        subjectSelect.replaceWith('<input type="text" name="subject_name" id="edit_subject_name" class="form-control" placeholder="e.g., Mathematics" required>');
+                        return;
+                    }
+                    if(subjectSelect.is("input")) {
+                        subjectSelect.replaceWith('<select name="subject_name" id="edit_subject_name" class="form-select" required></select>');
+                        subjectSelect = $('#edit_subject_name');
+                    }
+                    subjectSelect.html(options);
                 }
             });
         });
     </script>
+
 </body>
 </html>

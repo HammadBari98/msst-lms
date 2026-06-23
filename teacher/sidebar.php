@@ -192,7 +192,7 @@
     <li><a href="attendance-report.php"><i class="fas fa-calendar-check"></i> <span>Attendance Report</span></a></li>
     <li><a href="online-classes.php"><i class="fas fa-chart-bar"></i> <span>Online Classes</span></a></li>
     <li><a href="study-materials.php"><i class="fas fa-chart-bar"></i> <span>Study Materials</span></a></li>
-    
+    <li><a href="award-list.php"><i class="fas fa-trophy"></i> <span>Award List</span></a></li>
     <li><a href="notice.php"><i class="fas fa-bullhorn"></i> <span>Notices</span></a></li>
     <!-- <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>
     <li><a href="performance-reports.php"><i class="fas fa-life-ring"></i> <span>Performance Reports</span></a></li> -->
