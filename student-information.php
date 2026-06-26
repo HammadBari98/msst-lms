@@ -232,11 +232,14 @@ try {
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
                 <h1 class="h3 mb-0 text-gray-800">Student Information</h1>
                 <div>
+                    <button class="btn btn-dark shadow-sm text-white me-2" onclick="printStudentList()">
+                        <i class="fas fa-print fa-sm text-white-50"></i> Print List
+                    </button>
                     <button class="btn btn-success shadow-sm me-2" data-bs-toggle="modal" data-bs-target="#importModal">
-                        <i class="fas fa-file-excel fa-sm text-white-50"></i> Import Students
+                        <i class="fas fa-file-excel fa-sm text-white-50"></i> Import
                     </button>
                     <button class="btn btn-info shadow-sm text-white" onclick="exportStudents()">
-                        <i class="fas fa-download fa-sm text-white-50"></i> Export Students
+                        <i class="fas fa-download fa-sm text-white-50"></i> Export
                     </button>
                 </div>
             </div>
@@ -322,7 +325,10 @@ try {
                     
                     <div class="row mb-4 align-items-center bg-white p-3 rounded-3 shadow-sm mx-1">
                         <div class="col-md-12">
-                            <h3 id="studentName" class="mb-1 fw-bold text-dark"></h3>
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <h3 id="studentName" class="mb-0 fw-bold text-dark"></h3>
+                                <span id="studentRegId" class="badge bg-secondary"></span>
+                            </div>
                             <p id="studentClassInfo" class="text-primary fw-bold mb-2"></p>
                             <p id="studentEmail" class="text-muted small mb-0"></p>
                         </div>
@@ -490,9 +496,12 @@ try {
                     </div>
                 </form>
             </div>
-            <div class="modal-footer border-top bg-white">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary shadow-sm" id="saveStudentBtn"><i class="fas fa-save me-1"></i> Save Changes</button>
+            <div class="modal-footer border-top bg-white d-flex justify-content-between">
+                <button type="button" class="btn btn-dark shadow-sm" onclick="printProfile()"><i class="fas fa-file-pdf me-1"></i> Print / PDF</button>
+                <div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary shadow-sm" id="saveStudentBtn"><i class="fas fa-save me-1"></i> Save Changes</button>
+                </div>
             </div>
         </div>
     </div>
@@ -633,6 +642,7 @@ try {
     }
 
     function populateStudentForm(student) {
+        document.getElementById('studentRegId').textContent = student.user_id_string || 'N/A'; 
         document.getElementById('studentName').textContent = student.full_name;
         document.getElementById('studentClassInfo').textContent = 
             `Class: ${student.class_name || 'N/A'} | Section: ${student.section_name || 'N/A'} | Program: ${student.fee_category || 'N/A'}`;
@@ -809,6 +819,92 @@ try {
         placeholder.append(wrapper);
         window.scrollTo({ top: 0, behavior: 'smooth' });
         setTimeout(() => { if (wrapper.parentNode === placeholder) wrapper.remove(); }, 5000);
+    }
+
+    function printStudentList() {
+        // Grab the full array of students directly from PHP
+        const students = <?= json_encode($students) ?>;
+        let tableRows = '';
+        let sno = 1;
+
+        // Loop through the students to build the table rows
+        students.forEach(s => {
+            tableRows += `
+                <tr>
+                    <td style="text-align: center;">${sno++}</td>
+                    <td><strong>${s.user_id_string || '-'}</strong></td>
+                    <td>${s.full_name || '-'}</td>
+                    <td>${s.father_name || '-'}</td>
+                    <td>Class ${s.class_name || '-'}</td>
+                    <td>${s.section_name || '-'}</td>
+                    <td>${s.cell_no || s.phone_no || '-'}</td>
+                    <td>${s.status || '-'}</td>
+                </tr>
+            `;
+        });
+
+        // Construct the printable HTML document
+        const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Master Student List</title>
+            <style>
+                body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; }
+                .header { text-align: center; border-bottom: 2px solid #2c3e50; padding-bottom: 10px; margin-bottom: 20px; }
+                .header h1 { margin: 0; font-size: 24px; color: #2c3e50; text-transform: uppercase; }
+                .header p { margin: 5px 0 0; font-size: 14px; color: #7f8c8d; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+                th, td { padding: 8px 10px; border: 1px solid #bdc3c7; text-align: left; }
+                th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; text-transform: uppercase; font-size: 11px; }
+                .footer { text-align: center; font-size: 10px; color: #95a5a6; margin-top: 30px; border-top: 1px solid #ecf0f1; padding-top: 10px; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Muhaddisa School of Science and Technology</h1>
+                <p>Official Master Student Register</p>
+                <p><strong>Total Active/Inactive Students:</strong> ${students.length}</p>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="text-align: center; width: 5%;">S.No</th>
+                        <th style="width: 10%;">Reg ID</th>
+                        <th style="width: 20%;">Student Name</th>
+                        <th style="width: 20%;">Father's Name</th>
+                        <th style="width: 10%;">Class</th>
+                        <th style="width: 10%;">Section</th>
+                        <th style="width: 15%;">Contact No.</th>
+                        <th style="width: 10%;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+
+            <div class="footer">
+                Printed on: ${new Date().toLocaleString()} | Generated by MSST LMS Admin Portal
+            </div>
+
+            <script>
+                // Auto-trigger print dialog and close temporary window afterward
+                window.onload = function() {
+                    window.print();
+                    setTimeout(function() { window.close(); }, 500);
+                };
+            <\/script>
+        </body>
+        </html>
+        `;
+
+        // Open a hidden window, write the HTML, and trigger print
+        const printWin = window.open('', '_blank');
+        printWin.document.open();
+        printWin.document.write(html);
+        printWin.document.close();
     }
 </script>
 </body>
