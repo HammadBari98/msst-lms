@@ -219,7 +219,7 @@ if ($view_mode === 'voucher') {
                     'school_email_web_line' => "E-mail:fees@msstskardu.com,Web:www.msstskardu.com",
                     'bank_details_line' => "Bank Al Habib : Ghulam Abbas, AC #: 20440981003831012",
                     'website_url' => "www.msstskardu.com",
-                    'logo_path' => "http://localhost/msst/lms/assets/images/msst-logo.png",
+                    'logo_path' => "../assets/images/msst-logo.png",
                     'status' => $fee_slip['status'],
                     'paid_on' => $fee_slip['paid_on'] ? date('d/m/Y', strtotime($fee_slip['paid_on'])) : '',
                 ];

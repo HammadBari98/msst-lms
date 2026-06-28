@@ -1,14 +1,42 @@
 <?php
 session_start();
-require_once __DIR__ . '/config/db_config.php';
+require_once __DIR__ . '/../config/db_config.php';
 
-// Check if the admin is logged in
-if (!isset($_SESSION['admin_logged_in'])) {
+// Check if the teacher is logged in
+if (!isset($_SESSION['teacher_logged_in'])) {
     header('Location: login.php');
     exit;
 }
 
-$admin_name = $_SESSION['admin_name'] ?? 'Admin';
+$teacher_name = $_SESSION['teacher_name'] ?? 'Teacher';
+
+// 1. ROBUST TEACHER ID FETCH 
+$raw_session_id = $_SESSION['user_id'] ?? $_SESSION['teacher_id'] ?? $_SESSION['id'] ?? null;
+$teacher_user_id = 0;
+if ($raw_session_id) {
+    if (is_numeric($raw_session_id)) { $teacher_user_id = (int)$raw_session_id; } 
+    else {
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE user_id_string = ? LIMIT 1");
+        $stmt->execute([$raw_session_id]);
+        $teacher_user_id = $stmt->fetchColumn() ?: 0;
+    }
+}
+if (!$teacher_user_id) {
+    $email = $_SESSION['teacher_email'] ?? $_SESSION['email'] ?? '';
+    if ($email) {
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+        $stmt->execute([$email]);
+        $teacher_user_id = $stmt->fetchColumn() ?: 0;
+    }
+}
+$teacher_details_id = 0;
+if ($teacher_user_id > 0) {
+    try {
+        $stmt_td = $pdo->prepare("SELECT id FROM teacher_details WHERE user_id = ? LIMIT 1");
+        $stmt_td->execute([$teacher_user_id]);
+        $teacher_details_id = $stmt_td->fetchColumn() ?: 0;
+    } catch (Exception $e) {}
+}
 
 // Check for session messages
 $action_msg = '';
@@ -23,7 +51,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $att_date = $_POST['edit_date'];
     $status = $_POST['edit_status'];
     $class_id = $_POST['edit_class_id'];
-    $admin_id = $_SESSION['user_id'] ?? 0;
 
     try {
         $stmt = $pdo->prepare("
@@ -31,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             VALUES (?, ?, ?, ?, ?) 
             ON DUPLICATE KEY UPDATE status = VALUES(status), marked_by = VALUES(marked_by)
         ");
-        $stmt->execute([$student_id, $class_id, $att_date, $status, $admin_id]);
+        $stmt->execute([$student_id, $class_id, $att_date, $status, $teacher_user_id]);
         $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible shadow-sm"><i class="fas fa-check-circle me-2"></i>Attendance updated for ' . date('d M', strtotime($att_date)) . '!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
     } catch (Exception $e) {
         $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible shadow-sm"><i class="fas fa-times-circle me-2"></i>Error: ' . $e->getMessage() . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
@@ -40,10 +67,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
-// Fetch available classes for the dropdown
+// Fetch available classes assigned to THIS teacher
 $available_classes = [];
 try {
-    $available_classes = $pdo->query("SELECT id, class_name FROM classes ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+    $stmt_classes = $pdo->prepare("
+        SELECT DISTINCT c.id, c.class_name 
+        FROM teacher_class_assignments tca 
+        JOIN classes c ON tca.class_id = c.id 
+        WHERE tca.teacher_user_id = ? OR tca.teacher_user_id = ?
+        ORDER BY c.id
+    ");
+    $stmt_classes->execute([$teacher_user_id, $teacher_details_id]);
+    $available_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
 
 // Setup Filters
@@ -60,18 +95,9 @@ $month_label = date('F Y', strtotime($selected_month . '-01'));
 
 $students = [];
 $attendance_data = [];
-$off_days = [];
 
 if ($selected_class) {
     try {
-        // Fetch Off Days for this month
-        $stmt_offs = $pdo->prepare("SELECT off_date, title FROM school_off_days WHERE DATE_FORMAT(off_date, '%Y-%m') = ?");
-        $stmt_offs->execute([$selected_month]);
-        while ($row = $stmt_offs->fetch(PDO::FETCH_ASSOC)) {
-            $off_days[(int)date('d', strtotime($row['off_date']))] = $row['title'];
-        }
-
-        // 1. Fetch Students in the selected class
         $stmt_students = $pdo->prepare("
             SELECT u.id, u.user_id_string, u.full_name, sd.father_name 
             FROM users u
@@ -83,7 +109,6 @@ if ($selected_class) {
         $stmt_students->execute([$selected_class]);
         $students = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
 
-        // 2. Fetch Attendance for this class in this month
         $stmt_att = $pdo->prepare("
             SELECT student_id, DAY(attendance_date) as day, status 
             FROM student_attendance 
@@ -106,14 +131,29 @@ if ($selected_class) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance Report | Admin Dashboard</title>
+    <title>Monthly Matrix | Teacher Dashboard</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-    <link rel="stylesheet" href="style.css">
     
     <style>
+        :root { --primary: #007bff; --secondary: #6c757d; --light-bg: #f8f9fc; --dark-text: #343a40; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--light-bg); overflow-x: hidden; }
+        .sidebar { width: 250px; height: 100vh; position: fixed; top: 0; left: 0; background: var(--primary); color: white; transition: all 0.3s; z-index: 1000; }
+        .sidebar.collapsed { width: 70px; }
+        .sidebar ul { list-style: none; padding: 0; }
+        .sidebar ul li a { color: rgba(255, 255, 255, 0.8); padding: 0.75rem 1rem; display: flex; align-items: center; text-decoration: none; transition: background 0.2s, color 0.2s; }
+        .sidebar ul li a:hover, .sidebar ul li a.active { background: rgba(255, 255, 255, 0.1); color: white; }
+        .sidebar ul li a i { width: 20px; text-align: center; margin-right: 0.75rem; }
+        .sidebar.collapsed ul li a span { display: none; }
+        #main-content { margin-left: 250px; transition: all 0.3s; min-height: 100vh; display: flex; flex-direction: column; }
+        #main-content.collapsed { margin-left: 70px; }
+        .topbar { height: 70px; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.1); display: flex; align-items: center; padding: 0 1rem; }
+        .content-wrapper { flex: 1; padding: 1.5rem; }
+        .footer { text-align: center; padding: 1rem; background: white; font-size: 0.9rem; color: var(--secondary); border-top: 1px solid #e3e6f0; }
+        @media (max-width: 768px) { .sidebar { left: -250px; } .sidebar.show { left: 0; } #main-content, #main-content.collapsed { margin-left: 0; } }
+
         .att-cell { text-align: center; font-weight: bold; font-size: 0.8rem; vertical-align: middle; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
         .att-cell:hover { transform: scale(1.1); box-shadow: 0 4px 8px rgba(0,0,0,0.1); z-index: 10; position: relative; border-radius: 4px; }
         .att-P { color: #198754; background-color: #e8f5e9 !important; }
@@ -121,11 +161,7 @@ if ($selected_class) {
         .att-L { color: #856404; background-color: #fff3cd !important; }
         .att-LT { color: #fd7e14; background-color: #ffebd3 !important; }
         .att-empty { color: #ccc; }
-        
-        /* NEW: Off Day Style */
-        .att-off { background-color: #ffeb3b !important; color: #856404 !important; font-weight: bold; cursor: not-allowed; }
-        
-        .summary-cell { pointer-events: none; } 
+        .summary-cell { pointer-events: none; }
         
         .table-responsive { overflow-x: auto; }
         .freeze-col { position: sticky; left: 0; background-color: #f8f9fa; z-index: 2; border-right: 1px solid #dee2e6; }
@@ -146,7 +182,7 @@ if ($selected_class) {
             
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
                 <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-chart-line me-2"></i>Monthly Attendance Matrix</h1>
-                <div>
+                <div class="mt-3 mt-sm-0">
                     <button class="btn btn-secondary shadow-sm me-2 no-print" onclick="printReport()">
                         <i class="fas fa-print me-1"></i> Print Report
                     </button>
@@ -158,120 +194,121 @@ if ($selected_class) {
 
             <?= $action_msg ?>
 
-            <div class="card shadow-sm mb-4 border-0 rounded-3 no-print">
-                <div class="card-body bg-light rounded-3">
-                    <form method="GET" id="reportFilterForm" class="row g-3 align-items-end">
-                        <div class="col-md-4">
-                            <label class="form-label fw-bold text-secondary">Select Class</label>
-                            <select class="form-select border-primary fw-bold" name="class_id" onchange="document.getElementById('reportFilterForm').submit()">
-                                <?php foreach($available_classes as $c): ?>
-                                    <option value="<?= $c['id'] ?>" <?= $c['id'] == $selected_class ? 'selected' : '' ?>>
-                                        Class <?= htmlspecialchars($c['class_name']) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-bold text-secondary">Select Month</label>
-                            <input type="month" class="form-control border-primary fw-bold" name="month" value="<?= htmlspecialchars($selected_month) ?>" onchange="document.getElementById('reportFilterForm').submit()">
-                        </div>
-                    </form>
+            <?php if (empty($available_classes)): ?>
+                <div class="alert alert-warning border-0 shadow-sm p-4 text-center">
+                    <i class="fas fa-clipboard-list fa-3x text-warning mb-3 opacity-50"></i>
+                    <h4 class="fw-bold text-dark">No Classes Assigned</h4>
+                    <p class="mb-0 text-muted">You are currently not assigned to any classes. Please contact the Admin to assign you to a class.</p>
                 </div>
-            </div>
-
-            <div class="card shadow border-0 rounded-3 printable-area">
-                <div class="card-header py-3 bg-white d-flex justify-content-between align-items-center border-bottom">
-                    <h6 class="m-0 font-weight-bold text-primary">
-                        Attendance Grid: Class <?= htmlspecialchars($selected_class_name) ?> 
-                        <span class="badge bg-secondary ms-2"><?= $month_label ?></span>
-                    </h6>
-                    <div class="small fw-bold no-print">
-                        <span class="me-3"><i class="fas fa-square text-success"></i> P = Present</span>
-                        <span class="me-3"><i class="fas fa-square text-danger"></i> A = Absent</span>
-                        <span class="me-3"><i class="fas fa-square text-warning"></i> L = Leave</span>
-                        <span class="me-3"><i class="fas fa-square" style="color: #fd7e14;"></i> LT = Late</span>
-                        <span><i class="fas fa-square" style="color: #ffeb3b;"></i> OFF</span>
+            <?php else: ?>
+                <div class="card shadow-sm mb-4 border-0 rounded-3 no-print">
+                    <div class="card-body bg-white rounded-3">
+                        <form method="GET" id="reportFilterForm" class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-secondary">My Classes</label>
+                                <select class="form-select border-primary fw-bold" name="class_id" onchange="document.getElementById('reportFilterForm').submit()">
+                                    <?php foreach($available_classes as $c): ?>
+                                        <option value="<?= $c['id'] ?>" <?= $c['id'] == $selected_class ? 'selected' : '' ?>>
+                                            Class <?= htmlspecialchars($c['class_name']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-secondary">Select Month</label>
+                                <input type="month" class="form-control border-primary fw-bold" name="month" value="<?= htmlspecialchars($selected_month) ?>" onchange="document.getElementById('reportFilterForm').submit()">
+                            </div>
+                        </form>
                     </div>
                 </div>
-                
-                <div class="card-body">
-                    <?php if(empty($students)): ?>
-                        <div class="text-center p-5 text-muted">
-                            <i class="fas fa-users-slash fa-3x mb-3 opacity-50"></i>
-                            <h5>No active students found in this class.</h5>
+
+                <div class="card shadow border-0 rounded-3 printable-area">
+                    <div class="card-header py-3 bg-white d-flex justify-content-between align-items-center border-bottom">
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            Attendance Grid: Class <?= htmlspecialchars($selected_class_name) ?> 
+                            <span class="badge bg-secondary ms-2"><?= $month_label ?></span>
+                        </h6>
+                        <div class="small fw-bold no-print">
+                            <span class="me-3"><i class="fas fa-square text-success"></i> P = Present</span>
+                            <span class="me-3"><i class="fas fa-square text-danger"></i> A = Absent</span>
+                            <span class="me-3"><i class="fas fa-square text-warning"></i> L = Leave</span>
+                            <span><i class="fas fa-square" style="color: #fd7e14;"></i> LT = Late</span>
                         </div>
-                    <?php else: ?>
-                        <p class="text-muted small mb-2 no-print"><i class="fas fa-info-circle me-1"></i> <strong>Tip:</strong> Click on any day cell to quickly edit that student's attendance!</p>
-                        <div class="table-responsive border rounded" style="max-height: 65vh;">
-                            <table class="table table-bordered table-hover mb-0" id="reportTable" style="min-width: 1200px;">
-                                <thead class="align-middle text-center">
-                                    <tr>
-                                        <th class="freeze-col text-start ps-3" style="width: 80px; min-width: 80px;">ID</th>
-                                        <th class="freeze-col-2 text-start" style="width: 180px; min-width: 180px;">Student Name</th>
-                                        
-                                        <?php for($d = 1; $d <= $days_in_month; $d++): ?>
-                                            <?php $is_off = isset($off_days[$d]); ?>
-                                            <th style="width: 30px; min-width: 30px; font-size: 0.75rem;" class="<?= $is_off ? 'bg-warning bg-opacity-25' : '' ?>" <?= $is_off ? 'title="'.htmlspecialchars($off_days[$d]).'"' : '' ?>><?= $d ?></th>
-                                        <?php endfor; ?>
-                                        
-                                        <th style="width: 50px; min-width: 50px;" class="bg-success text-white">P</th>
-                                        <th style="width: 50px; min-width: 50px;" class="bg-danger text-white">A</th>
-                                        <th style="width: 50px; min-width: 50px;" class="bg-warning text-dark">L</th>
-                                        <th style="width: 60px; min-width: 60px;" class="bg-primary text-white">%</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($students as $student): 
-                                        $p_count = 0; $a_count = 0; $l_count = 0; $lt_count = 0; $total_marked = 0;
-                                    ?>
+                    </div>
+                    
+                    <div class="card-body">
+                        <?php if(empty($students)): ?>
+                            <div class="text-center p-5 text-muted">
+                                <i class="fas fa-users-slash fa-3x mb-3 opacity-50"></i>
+                                <h5>No active students found in this class.</h5>
+                            </div>
+                        <?php else: ?>
+                            <p class="text-muted small mb-2 no-print"><i class="fas fa-info-circle me-1"></i> <strong>Tip:</strong> Click on any day cell to quickly edit that student's attendance!</p>
+                            <div class="table-responsive border rounded" style="max-height: 65vh;">
+                                <table class="table table-bordered table-hover mb-0" id="reportTable" style="min-width: 1200px;">
+                                    <thead class="align-middle text-center">
                                         <tr>
-                                            <td class="freeze-col text-start ps-3 fw-bold text-secondary" style="font-size: 0.8rem;">
-                                                <?= htmlspecialchars($student['user_id_string']) ?>
-                                            </td>
-                                            <td class="freeze-col-2 text-start bg-white">
-                                                <div class="fw-bold text-dark" style="font-size: 0.85rem;"><?= htmlspecialchars($student['full_name']) ?></div>
-                                            </td>
+                                            <th class="freeze-col text-start ps-3" style="width: 80px; min-width: 80px;">ID</th>
+                                            <th class="freeze-col-2 text-start" style="width: 180px; min-width: 180px;">Student Name</th>
                                             
-                                            <?php for($d = 1; $d <= $days_in_month; $d++): 
-                                                $is_off = isset($off_days[$d]);
-                                                $exact_date = $selected_month . '-' . str_pad($d, 2, '0', STR_PAD_LEFT);
-                                                $status = $attendance_data[$student['id']][$d] ?? null;
+                                            <?php for($d = 1; $d <= $days_in_month; $d++): ?>
+                                                <th style="width: 30px; min-width: 30px; font-size: 0.75rem;"><?= $d ?></th>
+                                            <?php endfor; ?>
+                                            
+                                            <th style="width: 50px; min-width: 50px;" class="bg-success text-white">P</th>
+                                            <th style="width: 50px; min-width: 50px;" class="bg-danger text-white">A</th>
+                                            <th style="width: 50px; min-width: 50px;" class="bg-warning text-dark">L</th>
+                                            <th style="width: 60px; min-width: 60px;" class="bg-primary text-white">%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($students as $student): 
+                                            $p_count = 0; $a_count = 0; $l_count = 0; $lt_count = 0; $total_marked = 0;
+                                        ?>
+                                            <tr>
+                                                <td class="freeze-col text-start ps-3 fw-bold text-secondary" style="font-size: 0.8rem;">
+                                                    <?= htmlspecialchars($student['user_id_string']) ?>
+                                                </td>
+                                                <td class="freeze-col-2 text-start bg-white">
+                                                    <div class="fw-bold text-dark" style="font-size: 0.85rem;"><?= htmlspecialchars($student['full_name']) ?></div>
+                                                </td>
                                                 
-                                                if ($is_off) {
-                                                    // It's an Off Day, show it and don't count towards marks
-                                                    echo "<td class='att-cell att-off' title='".htmlspecialchars($off_days[$d])."'>OFF</td>";
-                                                } else {
-                                                    // Standard Marking Logic
+                                                <?php for($d = 1; $d <= $days_in_month; $d++): 
+                                                    $status = $attendance_data[$student['id']][$d] ?? null;
                                                     $cell_class = 'att-empty'; $mark = '-';
+                                                    
                                                     if ($status === 'Present') { $cell_class = 'att-P'; $mark = 'P'; $p_count++; $total_marked++; }
                                                     elseif ($status === 'Absent') { $cell_class = 'att-A'; $mark = 'A'; $a_count++; $total_marked++; }
                                                     elseif ($status === 'Leave') { $cell_class = 'att-L'; $mark = 'L'; $l_count++; $total_marked++; }
                                                     elseif ($status === 'Late') { $cell_class = 'att-LT'; $mark = 'LT'; $lt_count++; $p_count++; $total_marked++; } 
                                                     
-                                                    echo "<td class='att-cell $cell_class' title='Click to edit' onclick='openEditModal({$student['id']}, \"".htmlspecialchars($student['full_name'], ENT_QUOTES)."\", \"$exact_date\", \"".($status ?: 'Present')."\")'>$mark</td>";
-                                                }
-                                            endfor; ?>
-                                            
-                                            <?php 
-                                                $percent = $total_marked > 0 ? round(($p_count / $total_marked) * 100, 1) : 0;
-                                                $percent_color = $percent >= 75 ? 'text-success' : ($percent >= 50 ? 'text-warning' : 'text-danger');
-                                            ?>
-                                            <td class="att-cell summary-cell fw-bold bg-light"><?= $p_count ?></td>
-                                            <td class="att-cell summary-cell fw-bold bg-light text-danger"><?= $a_count ?></td>
-                                            <td class="att-cell summary-cell fw-bold bg-light text-warning"><?= $l_count + $lt_count ?></td>
-                                            <td class="att-cell summary-cell fw-bold bg-light <?= $percent_color ?>"><?= $total_marked > 0 ? $percent . '%' : '-' ?></td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    <?php endif; ?>
+                                                    $exact_date = $selected_month . '-' . str_pad($d, 2, '0', STR_PAD_LEFT);
+                                                ?>
+                                                    <td class="att-cell <?= $cell_class ?>" title="Click to edit" onclick="openEditModal(<?= $student['id'] ?>, '<?= htmlspecialchars($student['full_name'], ENT_QUOTES) ?>', '<?= $exact_date ?>', '<?= $status ?: 'Present' ?>')">
+                                                        <?= $mark ?>
+                                                    </td>
+                                                <?php endfor; ?>
+                                                
+                                                <?php 
+                                                    $percent = $total_marked > 0 ? round(($p_count / $total_marked) * 100, 1) : 0;
+                                                    $percent_color = $percent >= 75 ? 'text-success' : ($percent >= 50 ? 'text-warning' : 'text-danger');
+                                                ?>
+                                                <td class="att-cell summary-cell fw-bold bg-light"><?= $p_count ?></td>
+                                                <td class="att-cell summary-cell fw-bold bg-light text-danger"><?= $a_count ?></td>
+                                                <td class="att-cell summary-cell fw-bold bg-light text-warning"><?= $l_count + $lt_count ?></td>
+                                                <td class="att-cell summary-cell fw-bold bg-light <?= $percent_color ?>"><?= $total_marked > 0 ? $percent . '%' : '-' ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
-            </div>
+            <?php endif; ?>
             
         </div>
     </div>
-    <footer class="footer no-print"><div class="container-fluid"><p class="text-center mb-0">© <?= date('Y') ?> Muhaddisa School of Science and Technology.</p></div></footer>
 </div>
 
 <div class="modal fade" id="quickEditModal" tabindex="-1">
@@ -381,7 +418,6 @@ if ($selected_class) {
             .att-A { background-color: #f8d7da !important; color: #dc3545 !important; font-weight: bold; }
             .att-L { background-color: #fff3cd !important; color: #856404 !important; font-weight: bold; }
             .att-LT { background-color: #ffebd3 !important; color: #fd7e14 !important; font-weight: bold; }
-            .att-off { background-color: #ffeb3b !important; color: #856404 !important; font-weight: bold; }
             .bg-success { background-color: #198754 !important; color: white !important; }
             .bg-danger { background-color: #dc3545 !important; color: white !important; }
             .bg-warning { background-color: #ffc107 !important; color: black !important; }

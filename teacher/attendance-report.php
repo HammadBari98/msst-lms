@@ -95,9 +95,17 @@ $month_label = date('F Y', strtotime($selected_month . '-01'));
 
 $students = [];
 $attendance_data = [];
+$off_days = [];
 
 if ($selected_class) {
     try {
+        // Fetch Off Days for this month
+        $stmt_offs = $pdo->prepare("SELECT off_date, title FROM school_off_days WHERE DATE_FORMAT(off_date, '%Y-%m') = ?");
+        $stmt_offs->execute([$selected_month]);
+        while ($row = $stmt_offs->fetch(PDO::FETCH_ASSOC)) {
+            $off_days[(int)date('d', strtotime($row['off_date']))] = $row['title'];
+        }
+
         $stmt_students = $pdo->prepare("
             SELECT u.id, u.user_id_string, u.full_name, sd.father_name 
             FROM users u
@@ -161,6 +169,9 @@ if ($selected_class) {
         .att-L { color: #856404; background-color: #fff3cd !important; }
         .att-LT { color: #fd7e14; background-color: #ffebd3 !important; }
         .att-empty { color: #ccc; }
+        
+        .att-off { background-color: #ffeb3b !important; color: #856404 !important; font-weight: bold; cursor: not-allowed; }
+        
         .summary-cell { pointer-events: none; }
         
         .table-responsive { overflow-x: auto; }
@@ -232,7 +243,8 @@ if ($selected_class) {
                             <span class="me-3"><i class="fas fa-square text-success"></i> P = Present</span>
                             <span class="me-3"><i class="fas fa-square text-danger"></i> A = Absent</span>
                             <span class="me-3"><i class="fas fa-square text-warning"></i> L = Leave</span>
-                            <span><i class="fas fa-square" style="color: #fd7e14;"></i> LT = Late</span>
+                            <span class="me-3"><i class="fas fa-square" style="color: #fd7e14;"></i> LT = Late</span>
+                            <span><i class="fas fa-square" style="color: #ffeb3b;"></i> OFF</span>
                         </div>
                     </div>
                     
@@ -252,7 +264,8 @@ if ($selected_class) {
                                             <th class="freeze-col-2 text-start" style="width: 180px; min-width: 180px;">Student Name</th>
                                             
                                             <?php for($d = 1; $d <= $days_in_month; $d++): ?>
-                                                <th style="width: 30px; min-width: 30px; font-size: 0.75rem;"><?= $d ?></th>
+                                                <?php $is_off = isset($off_days[$d]); ?>
+                                                <th style="width: 30px; min-width: 30px; font-size: 0.75rem;" class="<?= $is_off ? 'bg-warning bg-opacity-25' : '' ?>" <?= $is_off ? 'title="'.htmlspecialchars($off_days[$d]).'"' : '' ?>><?= $d ?></th>
                                             <?php endfor; ?>
                                             
                                             <th style="width: 50px; min-width: 50px;" class="bg-success text-white">P</th>
@@ -274,20 +287,22 @@ if ($selected_class) {
                                                 </td>
                                                 
                                                 <?php for($d = 1; $d <= $days_in_month; $d++): 
-                                                    $status = $attendance_data[$student['id']][$d] ?? null;
-                                                    $cell_class = 'att-empty'; $mark = '-';
-                                                    
-                                                    if ($status === 'Present') { $cell_class = 'att-P'; $mark = 'P'; $p_count++; $total_marked++; }
-                                                    elseif ($status === 'Absent') { $cell_class = 'att-A'; $mark = 'A'; $a_count++; $total_marked++; }
-                                                    elseif ($status === 'Leave') { $cell_class = 'att-L'; $mark = 'L'; $l_count++; $total_marked++; }
-                                                    elseif ($status === 'Late') { $cell_class = 'att-LT'; $mark = 'LT'; $lt_count++; $p_count++; $total_marked++; } 
-                                                    
+                                                    $is_off = isset($off_days[$d]);
                                                     $exact_date = $selected_month . '-' . str_pad($d, 2, '0', STR_PAD_LEFT);
-                                                ?>
-                                                    <td class="att-cell <?= $cell_class ?>" title="Click to edit" onclick="openEditModal(<?= $student['id'] ?>, '<?= htmlspecialchars($student['full_name'], ENT_QUOTES) ?>', '<?= $exact_date ?>', '<?= $status ?: 'Present' ?>')">
-                                                        <?= $mark ?>
-                                                    </td>
-                                                <?php endfor; ?>
+                                                    $status = $attendance_data[$student['id']][$d] ?? null;
+                                                    
+                                                    if ($is_off) {
+                                                        echo "<td class='att-cell att-off' title='".htmlspecialchars($off_days[$d])."'>OFF</td>";
+                                                    } else {
+                                                        $cell_class = 'att-empty'; $mark = '-';
+                                                        if ($status === 'Present') { $cell_class = 'att-P'; $mark = 'P'; $p_count++; $total_marked++; }
+                                                        elseif ($status === 'Absent') { $cell_class = 'att-A'; $mark = 'A'; $a_count++; $total_marked++; }
+                                                        elseif ($status === 'Leave') { $cell_class = 'att-L'; $mark = 'L'; $l_count++; $total_marked++; }
+                                                        elseif ($status === 'Late') { $cell_class = 'att-LT'; $mark = 'LT'; $lt_count++; $p_count++; $total_marked++; } 
+                                                        
+                                                        echo "<td class='att-cell $cell_class' title='Click to edit' onclick='openEditModal({$student['id']}, \"".htmlspecialchars($student['full_name'], ENT_QUOTES)."\", \"$exact_date\", \"".($status ?: 'Present')."\")'>$mark</td>";
+                                                    }
+                                                endfor; ?>
                                                 
                                                 <?php 
                                                     $percent = $total_marked > 0 ? round(($p_count / $total_marked) * 100, 1) : 0;
@@ -418,6 +433,7 @@ if ($selected_class) {
             .att-A { background-color: #f8d7da !important; color: #dc3545 !important; font-weight: bold; }
             .att-L { background-color: #fff3cd !important; color: #856404 !important; font-weight: bold; }
             .att-LT { background-color: #ffebd3 !important; color: #fd7e14 !important; font-weight: bold; }
+            .att-off { background-color: #ffeb3b !important; color: #856404 !important; font-weight: bold; }
             .bg-success { background-color: #198754 !important; color: white !important; }
             .bg-danger { background-color: #dc3545 !important; color: white !important; }
             .bg-warning { background-color: #ffc107 !important; color: black !important; }

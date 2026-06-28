@@ -11,7 +11,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
 $admin_name = $_SESSION['admin_name'] ?? 'Admin';
 date_default_timezone_set('Asia/Karachi');
 
-// --- AUTO-PATCHER: Create Attendance Table if not exists ---
+// --- AUTO-PATCHER: Create Tables if not exists ---
 try {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS student_attendance (
@@ -26,36 +26,59 @@ try {
             FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
         )
     ");
+    // NEW: Off Days Table
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS school_off_days (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            off_date DATE NOT NULL UNIQUE,
+            title VARCHAR(255) DEFAULT 'Off Day'
+        )
+    ");
 } catch (PDOException $e) {
-    die("Database Error creating attendance table: " . $e->getMessage());
+    die("Database Error: " . $e->getMessage());
 }
 
-// --- HANDLE SAVING ATTENDANCE ---
 $action_msg = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_attendance') {
-    $class_id = $_POST['class_id'];
-    $att_date = $_POST['attendance_date'];
-    $admin_id = $_SESSION['user_id'] ?? 0;
 
-    try {
-        $pdo->beginTransaction();
-        // Insert new record, or update if it already exists for that student + date
-        $stmt = $pdo->prepare("
-            INSERT INTO student_attendance (student_id, class_id, attendance_date, status, marked_by) 
-            VALUES (?, ?, ?, ?, ?) 
-            ON DUPLICATE KEY UPDATE status = VALUES(status), marked_by = VALUES(marked_by)
-        ");
+// --- HANDLE POST ACTIONS (Save Attendance & Manage Off Days) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    
+    if ($_POST['action'] === 'save_attendance') {
+        $class_id = $_POST['class_id'];
+        $att_date = $_POST['attendance_date'];
+        $admin_id = $_SESSION['user_id'] ?? 0;
 
-        if (isset($_POST['status']) && is_array($_POST['status'])) {
-            foreach ($_POST['status'] as $student_id => $status) {
-                $stmt->execute([$student_id, $class_id, $att_date, $status, $admin_id]);
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare("
+                INSERT INTO student_attendance (student_id, class_id, attendance_date, status, marked_by) 
+                VALUES (?, ?, ?, ?, ?) 
+                ON DUPLICATE KEY UPDATE status = VALUES(status), marked_by = VALUES(marked_by)
+            ");
+
+            if (isset($_POST['status']) && is_array($_POST['status'])) {
+                foreach ($_POST['status'] as $student_id => $status) {
+                    $stmt->execute([$student_id, $class_id, $att_date, $status, $admin_id]);
+                }
             }
+            $pdo->commit();
+            $action_msg = '<div class="alert alert-success alert-dismissible shadow-sm"><i class="fas fa-check-circle me-2"></i>Attendance saved successfully for ' . date('d M Y', strtotime($att_date)) . '!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            $action_msg = '<div class="alert alert-danger alert-dismissible shadow-sm"><i class="fas fa-times-circle me-2"></i>Error saving attendance: ' . $e->getMessage() . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
         }
-        $pdo->commit();
-        $action_msg = '<div class="alert alert-success alert-dismissible shadow-sm"><i class="fas fa-check-circle me-2"></i>Attendance saved successfully for ' . date('d M Y', strtotime($att_date)) . '!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        $action_msg = '<div class="alert alert-danger alert-dismissible shadow-sm"><i class="fas fa-times-circle me-2"></i>Error saving attendance: ' . $e->getMessage() . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    } 
+    elseif ($_POST['action'] === 'add_off_day') {
+        try {
+            $pdo->prepare("INSERT IGNORE INTO school_off_days (off_date, title) VALUES (?, ?)")->execute([$_POST['off_date'], $_POST['title']]);
+            $action_msg = '<div class="alert alert-success alert-dismissible shadow-sm">Off Day added successfully! <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+        } catch (Exception $e) {}
+    } 
+    elseif ($_POST['action'] === 'delete_off_day') {
+        try {
+            $pdo->prepare("DELETE FROM school_off_days WHERE id = ?")->execute([$_POST['off_id']]);
+            $action_msg = '<div class="alert alert-success alert-dismissible shadow-sm">Off Day removed! <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+        } catch (Exception $e) {}
     }
 }
 
@@ -65,6 +88,12 @@ try {
     $available_classes = $pdo->query("SELECT id, class_name FROM classes ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
 
+// Fetch Off Days
+$stmt_offs = $pdo->query("SELECT * FROM school_off_days ORDER BY off_date DESC");
+$off_days_list = $stmt_offs->fetchAll(PDO::FETCH_ASSOC);
+$off_dates_assoc = [];
+foreach($off_days_list as $od) { $off_dates_assoc[$od['off_date']] = $od['title']; }
+
 // Determine Selected Filters
 $selected_class = $_GET['class_id'] ?? ($available_classes[0]['id'] ?? 0);
 $selected_date = $_GET['date'] ?? date('Y-m-d');
@@ -73,6 +102,8 @@ $selected_class_name = '';
 foreach($available_classes as $c) {
     if ($c['id'] == $selected_class) { $selected_class_name = $c['class_name']; break; }
 }
+
+$is_current_date_off = $off_dates_assoc[$selected_date] ?? false;
 
 // Fetch Students & Their Attendance
 $students = [];
@@ -147,13 +178,25 @@ $is_fully_marked = ($summary['Marked'] === $summary['Total'] && $summary['Total'
             <div class="d-sm-flex justify-content-between align-items-center mb-4">
                 <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-user-clock me-2"></i>Daily Attendance</h1>
                 <div>
-                    <a href="attendance-report.php" class="btn btn-info shadow-sm text-white me-2">
+                    <button class="btn btn-warning shadow-sm me-2" data-bs-toggle="modal" data-bs-target="#offDaysModal">
+                        <i class="fas fa-calendar-times"></i> Manage Off Days
+                    </button>
+                    <a href="attendance-report.php" class="btn btn-info shadow-sm text-white">
                         <i class="fas fa-calendar-alt fa-sm text-white-50 me-1"></i> View Monthly Report
                     </a>
                 </div>
             </div>
 
             <?= $action_msg ?>
+
+            <?php if ($is_current_date_off): ?>
+                <div class="alert alert-warning shadow-sm border-0 d-flex align-items-center mb-4">
+                    <i class="fas fa-umbrella-beach fa-2x me-3"></i>
+                    <div>
+                        <strong>Notice:</strong> This date is globally marked as an <strong>Off Day (<?= htmlspecialchars($is_current_date_off) ?>)</strong>. Attendance marking is not required.
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <div class="card shadow-sm mb-4 border-0 rounded-3">
                 <div class="card-body bg-light rounded-3">
@@ -295,10 +338,68 @@ $is_fully_marked = ($summary['Marked'] === $summary['Total'] && $summary['Total'
     <footer class="footer"><div class="container-fluid"><p class="text-center mb-0">© <?= date('Y') ?> Muhaddisa School of Science and Technology.</p></div></footer>
 </div>
 
+<div class="modal fade" id="offDaysModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning text-dark border-0 py-3">
+                <h5 class="modal-title fw-bold"><i class="fas fa-calendar-times me-2"></i>Manage Off Days</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light p-4">
+                <form method="post" class="mb-4 bg-white p-3 border rounded shadow-sm">
+                    <input type="hidden" name="action" value="add_off_day">
+                    <h6 class="fw-bold mb-3">Add New Off Day</h6>
+                    <div class="row g-2">
+                        <div class="col-md-5">
+                            <input type="date" name="off_date" class="form-control" required>
+                        </div>
+                        <div class="col-md-5">
+                            <input type="text" name="title" class="form-control" placeholder="Reason (e.g. Sunday, Eid)" required>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus"></i></button>
+                        </div>
+                    </div>
+                </form>
+
+                <h6 class="fw-bold mb-2">Existing Off Days</h6>
+                <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                    <table class="table table-sm table-hover bg-white border align-middle mb-0">
+                        <thead class="table-light" style="position: sticky; top: 0;">
+                            <tr>
+                                <th>Date</th>
+                                <th>Reason</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach($off_days_list as $od): ?>
+                                <tr>
+                                    <td class="fw-bold text-dark"><?= date('d M Y', strtotime($od['off_date'])) ?></td>
+                                    <td><?= htmlspecialchars($od['title']) ?></td>
+                                    <td class="text-end">
+                                        <form method="post" class="m-0" onsubmit="return confirm('Remove this Off Day?');">
+                                            <input type="hidden" name="action" value="delete_off_day">
+                                            <input type="hidden" name="off_id" value="<?= $od['id'] ?>">
+                                            <button type="submit" class="btn btn-sm text-danger p-0"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <?php if(empty($off_days_list)): ?>
+                                <tr><td colspan="3" class="text-center text-muted py-3">No off days configured.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Sidebar Toggle Script
     const sidebar = document.getElementById('sidebar');
     const mainContent = document.getElementById('main-content');
     const toggleBtn = document.getElementById('sidebarToggle');
@@ -309,15 +410,13 @@ $is_fully_marked = ($summary['Marked'] === $summary['Total'] && $summary['Total'
             mainContent.classList.toggle('collapsed');
             if(window.innerWidth<768){
                 if(!sidebar.classList.contains('collapsed')){
-                    sidebar.classList.add('show');
-                    mainContent.classList.add('show-sidebar');
+                    sidebar.classList.add('show'); mainContent.classList.add('show-sidebar');
                 } else {
-                    sidebar.classList.remove('show');
-                    mainContent.classList.remove('show-sidebar');
+                    sidebar.classList.remove('show'); mainContent.classList.remove('show-sidebar');
                 }
             }
         });
     }
 </script>
 </body>
-</html>
+</html> 
