@@ -179,7 +179,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $target_date = $target_month . '-01';
                 $multi_months = (isset($_POST['enable_multi_month']) && isset($_POST['multi_months'])) ? max(1, intval($_POST['multi_months'])) : 1;
                 
-                $pdo->beginTransaction();
+                // Check if table exists BEFORE starting transaction to prevent implicit commits
+                ensureFeeSlipComponentsTable($pdo);
                 
                 $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM fee_slips WHERE student_id = ? AND DATE_FORMAT(month_year, '%Y-%m') = ?");
                 $stmt_check->execute([$student_id, $target_month]);
@@ -188,8 +189,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['action_msg'] = '<div class="alert alert-warning alert-dismissible fade show"><i class="fas fa-exclamation-triangle me-2"></i>A fee slip already exists for ' . date('M Y', strtotime($target_date)) . '.<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
                     header('Location: ' . $_SERVER['PHP_SELF']); exit;
                 }
-                
-                ensureFeeSlipComponentsTable($pdo);
+
+                // NOW it is safe to start the transaction
+                $pdo->beginTransaction();
                 $is_first_month = !hasPreviousSlips($pdo, $student_id);
                 
                 $comp_stmt = $pdo->prepare("SELECT * FROM fee_components WHERE is_active = 1 AND is_optional = 0" . ($is_first_month ? "" : " AND type = 'recurring'") . " ORDER BY type, name");
@@ -470,6 +472,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt_cat = $pdo->prepare("SELECT tuition_amount FROM fee_categories WHERE name = ?");
             $stmt_cat->execute([$fee_category]); $full_base_tuition = (float)$stmt_cat->fetchColumn();
 
+            // Check if this was a multi-month slip originally
+            $stmt_comp = $pdo->prepare("SELECT component_name FROM fee_slip_components WHERE slip_no = ? AND component_name LIKE 'Base Monthly Tuition%' LIMIT 1");
+            $stmt_comp->execute([$slip_no]);
+            $old_comp_name = $stmt_comp->fetchColumn();
+
+            $multi_months = 1;
+            if (preg_match('/\((\d+) Months\)/i', $old_comp_name, $m)) {
+                $multi_months = (int)$m[1];
+            }
+
             $parts = explode('-', $slip_no); $installments = 1;
             if (count($parts) >= 6) {
                 $stmt_inst = $pdo->prepare("SELECT COUNT(*) FROM fee_slips WHERE slip_no LIKE ?");
@@ -477,8 +489,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $installments = max(1, (int)$stmt_inst->fetchColumn());
             }
 
-            $discounted_tuition = ($full_base_tuition / $installments) * ((100 - $percent) / 100);
-            $component_name = $percent > 0 ? "Base Monthly Tuition ($percent% Scholarship)" : "Base Monthly Tuition";
+            // Apply multi-month multiplier to base tuition before applying the discount
+            $discounted_tuition = (($full_base_tuition * $multi_months) / $installments) * ((100 - $percent) / 100);
+            
+            // Keep the (X Months) label intact when appending Scholarship label
+            $month_label = ($multi_months > 1) ? " ($multi_months Months)" : "";
+            $component_name = $percent > 0 ? "Base Monthly Tuition$month_label ($percent% Scholarship)" : "Base Monthly Tuition$month_label";
 
             $pdo->prepare("UPDATE fee_slip_components SET amount = ?, component_name = ? WHERE slip_no = ? AND component_name LIKE 'Base Monthly Tuition%'")->execute([$discounted_tuition, $component_name, $slip_no]);
             $pdo->prepare("UPDATE fee_slips fs SET amount = (SELECT COALESCE(SUM(amount), 0) FROM fee_slip_components WHERE slip_no = fs.slip_no) WHERE slip_no = ?")->execute([$slip_no]);
@@ -1371,7 +1387,6 @@ function viewStudentHistory(studentId, studentName) {
             
             if(data && data.length > 0) {
                 data.forEach(row => { 
-                    // Safely format dates and amounts
                     let monthStr = row.month_year ? new Date(row.month_year).toLocaleDateString('en-GB',{month:'short',year:'numeric'}) : 'N/A';
                     let paidStr = row.paid_on ? new Date(row.paid_on).toLocaleDateString('en-GB') : 'N/A';
                     let amountStr = parseFloat(row.amount).toLocaleString();
@@ -1386,9 +1401,8 @@ function viewStudentHistory(studentId, studentName) {
                         </tr>
                     `; 
                 }); 
-            } else {
-                html = '<tr><td colspan="5" class="text-center">No past payments found.</td></tr>';
             }
+            // Do NOT insert a manual colspan row. DataTables handles it automatically.
             
             $('#historyTableBody').html(html); 
             $('#historyTable').DataTable({
