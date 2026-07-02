@@ -45,7 +45,9 @@ function getAllStudents($pdo) {
                 sd.class_id, sd.section_id, sd.fee_category,
                 c.class_name, s.section_name,
                 (sd.one_time_fees_cleared = 0 OR sd.one_time_fees_cleared IS NULL) AS is_first_month,
-                (SELECT COUNT(*) FROM fee_slips WHERE student_id = u.id AND status = 'Pending' AND due_date < CURRENT_DATE) AS overdue_count
+                (SELECT COUNT(*) FROM fee_slips WHERE student_id = u.id AND status = 'Pending' AND due_date < CURRENT_DATE) AS overdue_count,
+                (SELECT COALESCE(SUM(amount), 0) FROM fee_slips WHERE student_id = u.id AND status = 'Pending' AND due_date < CURRENT_DATE) AS overdue_amount,
+                (SELECT GROUP_CONCAT(slip_no) FROM fee_slips WHERE student_id = u.id AND status = 'Pending' AND due_date < CURRENT_DATE) AS overdue_slips
             FROM users u
             JOIN roles r ON u.role_id = r.id
             LEFT JOIN student_details sd ON u.id = sd.user_id
@@ -55,10 +57,25 @@ function getAllStudents($pdo) {
             AND u.status = 'Active'
             ORDER BY c.class_name, s.section_name, u.full_name
         ");
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        return [];
-    }
+        $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Extract the hidden previously rolled-over months
+        foreach ($students as &$student) {
+            $student['true_overdue_count'] = (int)$student['overdue_count'];
+            if ($student['overdue_slips']) {
+                $slip_nos = explode(',', $student['overdue_slips']);
+                $placeholders = str_repeat('?,', count($slip_nos) - 1) . '?';
+                $stmt_comp = $pdo->prepare("SELECT component_name FROM fee_slip_components WHERE slip_no IN ($placeholders) AND component_name LIKE 'Previous Arrears & Late Fee%'");
+                $stmt_comp->execute($slip_nos);
+                while ($comp_name = $stmt_comp->fetchColumn()) {
+                    if (preg_match('/\((\d+)\s*month/', $comp_name, $matches)) {
+                        $student['true_overdue_count'] += (int)$matches[1];
+                    }
+                }
+            }
+        }
+        return $students;
+    } catch (PDOException $e) { return []; }
 }
 
 function getFeeCategories($pdo) {
@@ -236,7 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 foreach ($components as $comp) {
                     $compNameLower = strtolower(trim($comp['name']));
-                    if ($comp['id'] == $base_tuition_comp_id || strpos($compNameLower, 'tuition') !== false || strpos($compNameLower, 'monthly') !== false) continue; 
+                    if ($comp['id'] == $base_tuition_comp_id || strpos($compNameLower, 'tuition') !== false || strpos($compNameLower, 'monthly') !== false || strpos($compNameLower, 'arrears') !== false || strpos($compNameLower, 'late fee') !== false) continue; 
                     
                     // MULTIPLY OTHER RECURRING FEES BY NUMBER OF MONTHS
                     $multiplier = ($comp['type'] === 'recurring') ? $multi_months : 1;
@@ -247,23 +264,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $component_data[] = ['id' => $comp['id'], 'name' => $comp_label, 'amount' => $calc_amount, 'type' => $comp['type']];
                 }
                 
-                // --- LATE FEE ARREARS LOGIC (Charged Only Once) ---
-                $stmt_overdue = $pdo->prepare("SELECT COUNT(*) FROM fee_slips WHERE student_id = ? AND status = 'Pending' AND due_date < CURRENT_DATE");
+                // --- LATE FEE ARREARS LOGIC (Roll Over Old Fees + 500 Penalty) ---
+                $stmt_overdue = $pdo->prepare("SELECT COUNT(*) as o_count, COALESCE(SUM(amount), 0) as o_amount, GROUP_CONCAT(slip_no) as slip_nos FROM fee_slips WHERE student_id = ? AND status = 'Pending' AND due_date < CURRENT_DATE");
                 $stmt_overdue->execute([$student_id]);
-                $overdue_count = $stmt_overdue->fetchColumn();
+                $overdue_data = $stmt_overdue->fetch(PDO::FETCH_ASSOC);
+                $overdue_count = (int)$overdue_data['o_count'];
+                $overdue_amount = (float)$overdue_data['o_amount'];
 
                 if ($overdue_count > 0) {
-                    $late_fee_amount = $overdue_count * 500;
-                    $total_fee += $late_fee_amount;
+                    // Extract previously baked-in month counts from the old slip components
+                    $slip_nos_arr = explode(',', $overdue_data['slip_nos']);
+                    $placeholders = str_repeat('?,', count($slip_nos_arr) - 1) . '?';
+                    $stmt_comp = $pdo->prepare("SELECT component_name FROM fee_slip_components WHERE slip_no IN ($placeholders) AND component_name LIKE 'Previous Arrears & Late Fee%'");
+                    $stmt_comp->execute($slip_nos_arr);
+                    $extra_months = 0;
+                    while ($comp_name = $stmt_comp->fetchColumn()) {
+                        if (preg_match('/\((\d+)\s*month/', $comp_name, $matches)) { $extra_months += (int)$matches[1]; }
+                    }
+                    
+                    $true_overdue_count = $overdue_count + $extra_months;
+                    $late_fee_amount = $true_overdue_count * 500;
+                    $total_arrears = $overdue_amount + $late_fee_amount;
+                    $total_fee += $total_arrears;
 
-                    $stmt_lf = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Late Fee Arrears' LIMIT 1");
+                    $stmt_lf = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Previous Arrears & Late Fee' LIMIT 1");
                     $stmt_lf->execute();
                     $lf_comp_id = $stmt_lf->fetchColumn();
                     if (!$lf_comp_id) {
-                        $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Late Fee Arrears', 0, 'recurring', 'Late fee for previous overdue slips', 0, 1)");
+                        $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Previous Arrears & Late Fee', 0, 'recurring', 'Rolled over unpaid fees and late charges', 0, 1)");
                         $lf_comp_id = $pdo->lastInsertId();
                     }
-                    $component_data[] = ['id' => $lf_comp_id, 'name' => 'Late Fee Arrears (' . $overdue_count . ' month(s))', 'amount' => $late_fee_amount, 'type' => 'recurring'];
+                    $component_data[] = ['id' => $lf_comp_id, 'name' => 'Previous Arrears & Late Fee (' . $true_overdue_count . ' month(s))', 'amount' => $total_arrears, 'type' => 'recurring'];
+                    
+                    $pdo->prepare("UPDATE fee_slips SET status = 'Overdue' WHERE student_id = ? AND status = 'Pending' AND due_date < CURRENT_DATE")->execute([$student_id]);
                 }
                 
                 $installment_amount = $total_fee / $installments;
@@ -354,37 +387,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 foreach ($components as $comp) {
                     $compNameLower = strtolower(trim($comp['name']));
-                    if ($comp['id'] == $base_tuition_comp_id || strpos($compNameLower, 'tuition') !== false || strpos($compNameLower, 'monthly') !== false) continue; 
+                    if ($comp['id'] == $base_tuition_comp_id || strpos($compNameLower, 'tuition') !== false || strpos($compNameLower, 'monthly') !== false || strpos($compNameLower, 'arrears') !== false || strpos($compNameLower, 'late fee') !== false) continue; 
                     
                     $total_fee += (float)$comp['amount'];
                     $component_data[] = ['id' => $comp['id'], 'name' => $comp['name'], 'amount' => (float)$comp['amount'], 'type' => $comp['type']];
                 }
-                // --- NEW: LATE FEE ARREARS LOGIC ---
-                $stmt_overdue = $pdo->prepare("SELECT COUNT(*) FROM fee_slips WHERE student_id = ? AND status = 'Pending' AND due_date < CURRENT_DATE");
+                // --- NEW: LATE FEE ARREARS LOGIC (Roll Over Old Fees + 500 Penalty) ---
+                $stmt_overdue = $pdo->prepare("SELECT COUNT(*) as o_count, COALESCE(SUM(amount), 0) as o_amount, GROUP_CONCAT(slip_no) as slip_nos FROM fee_slips WHERE student_id = ? AND status = 'Pending' AND due_date < CURRENT_DATE");
                 $stmt_overdue->execute([$student['id']]);
-                $overdue_count = $stmt_overdue->fetchColumn();
+                $overdue_data = $stmt_overdue->fetch(PDO::FETCH_ASSOC);
+                $overdue_count = (int)$overdue_data['o_count'];
+                $overdue_amount = (float)$overdue_data['o_amount'];
+                
+                $has_arrears = false;
 
                 if ($overdue_count > 0) {
-                    $late_fee_amount = $overdue_count * 500;
-                    $total_fee += $late_fee_amount;
+                    $has_arrears = true;
+                    
+                    $slip_nos_arr = explode(',', $overdue_data['slip_nos']);
+                    $placeholders = str_repeat('?,', count($slip_nos_arr) - 1) . '?';
+                    $stmt_comp = $pdo->prepare("SELECT component_name FROM fee_slip_components WHERE slip_no IN ($placeholders) AND component_name LIKE 'Previous Arrears & Late Fee%'");
+                    $stmt_comp->execute($slip_nos_arr);
+                    $extra_months = 0;
+                    while ($comp_name = $stmt_comp->fetchColumn()) {
+                        if (preg_match('/\((\d+)\s*month/', $comp_name, $matches)) { $extra_months += (int)$matches[1]; }
+                    }
+                    
+                    $true_overdue_count = $overdue_count + $extra_months;
+                    $late_fee_amount = $true_overdue_count * 500;
+                    $total_arrears = $overdue_amount + $late_fee_amount;
+                    $total_fee += $total_arrears;
 
-                    // Ensure Late Fee Arrears component exists in DB
-                    $stmt_lf = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Late Fee Arrears' LIMIT 1");
+                    $stmt_lf = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Previous Arrears & Late Fee' LIMIT 1");
                     $stmt_lf->execute();
                     $lf_comp_id = $stmt_lf->fetchColumn();
                     if (!$lf_comp_id) {
-                        $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Late Fee Arrears', 0, 'recurring', 'Late fee for previous overdue slips', 0, 1)");
+                        $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Previous Arrears & Late Fee', 0, 'recurring', 'Rolled over unpaid fees and late charges', 0, 1)");
                         $lf_comp_id = $pdo->lastInsertId();
                     }
 
-                    // Inject Late Fee into the Voucher
-                    $component_data[] = ['id' => $lf_comp_id, 'name' => 'Late Fee Arrears (' . $overdue_count . ' month(s))', 'amount' => $late_fee_amount, 'type' => 'recurring'];
+                    $component_data[] = ['id' => $lf_comp_id, 'name' => 'Previous Arrears & Late Fee (' . $true_overdue_count . ' month(s))', 'amount' => $total_arrears, 'type' => 'recurring'];
                 }
 
                 $installment_amount = $total_fee / $installments;
                 $base_slip_no = generateSlipNumber($class_id, $student['id'], $target_month);
                 
                 $pdo->beginTransaction();
+                
+                if ($has_arrears) {
+                    // Mark old slips as Overdue so they don't get double-counted next month
+                    $pdo->prepare("UPDATE fee_slips SET status = 'Overdue' WHERE student_id = ? AND status = 'Pending' AND due_date < CURRENT_DATE")->execute([$student['id']]);
+                }
                 $charge_comp_id = null;
                 if ($installments > 1 && $installment_charge > 0) {
                     $stmt_find = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Installment Charges' LIMIT 1");
@@ -1070,18 +1123,20 @@ function calculateFeeForStudent(student) {
     let componentsHtml = `<div class="mb-2 p-2 border-bottom d-flex justify-content-between bg-primary bg-opacity-10 rounded"><span>${tuitionLabel}</span><strong class="text-primary">PKR ${calcTuition.toFixed(2)}</strong></div>`;
     let mandatoryTotal = calcTuition;
 
-    // --- LATE FEE ARREARS UI ADDITION (Fixed: Never multiplied) ---
-    const overdueCount = parseInt(student.overdue_count) || 0;
+    // --- LATE FEE ARREARS UI ADDITION (Roll Over Old Fees + 500 Penalty) ---
+    const overdueCount = parseInt(student.true_overdue_count) || 0;
+    const overdueAmount = parseFloat(student.overdue_amount) || 0;
     if (overdueCount > 0) {
         const lateFee = overdueCount * 500;
-        mandatoryTotal += lateFee;
-        componentsHtml += `<div class="mb-2 p-2 border-bottom d-flex justify-content-between bg-danger bg-opacity-10 rounded"><span><i class="fas fa-exclamation-circle text-danger me-2"></i> Late Fee Arrears (${overdueCount} month(s))</span><strong class="text-danger">PKR ${lateFee.toFixed(2)}</strong></div>`;
+        const totalArrears = overdueAmount + lateFee;
+        mandatoryTotal += totalArrears;
+        componentsHtml += `<div class="mb-2 p-2 border-bottom d-flex justify-content-between bg-danger bg-opacity-10 rounded"><span><i class="fas fa-exclamation-circle text-danger me-2"></i> Previous Unpaid Fees & Late Charges (${overdueCount} month(s))</span><strong class="text-danger">PKR ${totalArrears.toFixed(2)}</strong></div>`;
     }
     
     if (activeComponents && activeComponents.length > 0) {
         activeComponents.forEach(comp => {
             const lower = comp.name.toLowerCase();
-            if (lower.includes('installment charge') || lower.includes('tuition') || lower.includes('monthly')) return; 
+            if (lower.includes('installment charge') || lower.includes('tuition') || lower.includes('monthly') || lower.includes('arrears') || lower.includes('late fee')) return; 
             
             let amt = parseFloat(comp.amount);
             
