@@ -229,7 +229,8 @@ if ($selected_class) {
                                                 <?= htmlspecialchars($student['user_id_string']) ?>
                                             </td>
                                             <td class="freeze-col-2 text-start bg-white">
-                                                <div class="fw-bold text-dark" style="font-size: 0.85rem;"><?= htmlspecialchars($student['full_name']) ?></div>
+                                                <div class="fw-bold text-dark" style="font-size: 0.85rem; mb-1"><?= htmlspecialchars($student['full_name']) ?></div>
+                                                <div class="text-muted fw-semibold" style="font-size: 0.7rem;">S/D: <?= htmlspecialchars($student['father_name'] ?? 'N/A') ?></div>
                                             </td>
                                             
                                             <?php for($d = 1; $d <= $days_in_month; $d++): 

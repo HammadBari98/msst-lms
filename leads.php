@@ -46,6 +46,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 // --- END NEW EDIT LOGIC ---
+
+// --- NEW DELETE LEAD LOGIC ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_lead') {
+    $lead_id = $_POST['id'];
+    try {
+        $stmt = $pdo->prepare("DELETE FROM `admissions` WHERE id = ?");
+        if ($stmt->execute([$lead_id])) {
+            $_SESSION['action_msg'] = "<div class='alert alert-success alert-dismissible fade show'><i class='fas fa-check-circle me-2'></i>Lead deleted successfully!<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+        }
+    } catch (PDOException $e) {
+        $_SESSION['action_msg'] = "<div class='alert alert-danger alert-dismissible fade show'><i class='fas fa-times-circle me-2'></i>Error deleting lead.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+    }
+    header("Location: leads.php");
+    exit;
+}
+// --- END DELETE LOGIC ---
+
 $leads = [];
 $error_message = '';
 
@@ -160,7 +177,27 @@ try {
 
 <!-- View & Delete Modals -->
 <div class="modal fade" id="viewLeadModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Lead Details</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="leadDetailsBody"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div></div></div></div>
-<div class="modal fade" id="deleteLeadModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Confirm Deletion</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">Are you sure you want to delete the lead for <strong id="leadToDeleteName"></strong>?<input type="hidden" id="leadToDeleteId"></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button></div></div></div></div>
+<div class="modal fade" id="deleteLeadModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>Confirm Deletion</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to delete the lead for <strong id="leadToDeleteName"></strong>? This action cannot be undone.
+                    <input type="hidden" name="action" value="delete_lead">
+                    <input type="hidden" name="id" id="leadToDeleteId">
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger"><i class="fas fa-trash me-2"></i>Delete Lead</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <div class="modal fade" id="editLeadModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -283,11 +320,7 @@ try {
         document.getElementById('leadToDeleteName').textContent = name;
     }
 
-    document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
-        // Your existing delete logic
-        const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteLeadModal'));
-        deleteModal.hide();
-    });
+    
 </script>
 </body>
 </html>
