@@ -53,21 +53,23 @@ if ($teacher_user_id > 0) {
 // --- HANDLE POST ACTIONS ---
 $action_msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    
     if ($_POST['action'] === 'save_attendance') {
         $class_id = $_POST['class_id'];
+        $section_id = $_POST['section_id'] !== '' ? (int)$_POST['section_id'] : null;
         $att_date = $_POST['attendance_date'];
 
         try {
             $pdo->beginTransaction();
             $stmt = $pdo->prepare("
-                INSERT INTO student_attendance (student_id, class_id, attendance_date, status, marked_by) 
-                VALUES (?, ?, ?, ?, ?) 
-                ON DUPLICATE KEY UPDATE status = VALUES(status), marked_by = VALUES(marked_by)
+                INSERT INTO student_attendance (student_id, class_id, section_id, attendance_date, status, marked_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE status = VALUES(status), marked_by = VALUES(marked_by), section_id = VALUES(section_id)
             ");
 
             if (isset($_POST['status']) && is_array($_POST['status'])) {
                 foreach ($_POST['status'] as $student_id => $status) {
-                    $stmt->execute([$student_id, $class_id, $att_date, $status, $teacher_user_id]);
+                    $stmt->execute([$student_id, $class_id, $section_id, $att_date, $status, $teacher_user_id]);
                 }
             }
             $pdo->commit();
@@ -92,17 +94,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 }
 
 // --- FETCH TEACHER'S ASSIGNED CLASSES ---
-$available_classes = [];
+$available_class_sections = [];
 try {
     $stmt_classes = $pdo->prepare("
-        SELECT DISTINCT c.id, c.class_name 
-        FROM teacher_class_assignments tca 
-        JOIN classes c ON tca.class_id = c.id 
+        SELECT DISTINCT c.id AS class_id, c.class_name, IFNULL(tca.section_id, 0) AS section_id, sec.section_name
+        FROM teacher_class_assignments tca
+        JOIN classes c ON tca.class_id = c.id
+        LEFT JOIN sections sec ON tca.section_id = sec.id
         WHERE tca.teacher_user_id = ? OR tca.teacher_user_id = ?
-        ORDER BY c.id
+        ORDER BY c.class_name, sec.section_name
     ");
     $stmt_classes->execute([$teacher_user_id, $teacher_details_id]);
-    $available_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
+    $available_class_sections = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
 
 // Fetch Off Days
@@ -112,12 +115,22 @@ $off_dates_assoc = [];
 foreach($off_days_list as $od) { $off_dates_assoc[$od['off_date']] = $od['title']; }
 
 // Determine Selected Filters
-$selected_class = $_GET['class_id'] ?? ($available_classes[0]['id'] ?? 0);
+[$selected_class, $selected_section] = array_pad(explode('|', $_GET['class_section'] ?? ''), 2, null);
+if ($selected_class === null || $selected_class === '') {
+    $selected_class = $available_class_sections[0]['class_id'] ?? 0;
+    $selected_section = $available_class_sections[0]['section_id'] ?? 0;
+}
+$selected_section = (int)$selected_section;
 $selected_date = $_GET['date'] ?? date('Y-m-d');
 $selected_class_name = '';
+$selected_section_name = '';
 
-foreach($available_classes as $c) {
-    if ($c['id'] == $selected_class) { $selected_class_name = $c['class_name']; break; }
+foreach($available_class_sections as $c) {
+    if ($c['class_id'] == $selected_class && (int)$c['section_id'] == $selected_section) {
+        $selected_class_name = $c['class_name'];
+        $selected_section_name = $c['section_name'];
+        break;
+    }
 }
 
 $is_current_date_off = $off_dates_assoc[$selected_date] ?? false;
@@ -126,8 +139,8 @@ $is_current_date_off = $off_dates_assoc[$selected_date] ?? false;
 $students = [];
 if ($selected_class) {
     $stmt = $pdo->prepare("
-        SELECT 
-            u.id, u.user_id_string, u.full_name, 
+        SELECT
+            u.id, u.user_id_string, u.full_name,
             sd.father_name, s.section_name,
             a.status as attendance_status
         FROM users u
@@ -136,9 +149,10 @@ if ($selected_class) {
         LEFT JOIN sections s ON sd.section_id = s.id
         LEFT JOIN student_attendance a ON u.id = a.student_id AND a.attendance_date = ?
         WHERE r.role_name = 'Student' AND u.status = 'Active' AND sd.class_id = ?
+            AND IFNULL(sd.section_id, 0) = ?
         ORDER BY s.section_name, u.full_name
     ");
-    $stmt->execute([$selected_date, $selected_class]);
+    $stmt->execute([$selected_date, $selected_class, $selected_section]);
     $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -222,7 +236,7 @@ $is_fully_marked = ($summary['Marked'] === $summary['Total'] && $summary['Total'
 
             <?= $action_msg ?>
 
-            <?php if (empty($available_classes)): ?>
+            <?php if (empty($available_class_sections)): ?>
                 <div class="alert alert-warning border-0 shadow-sm p-4 text-center">
                     <i class="fas fa-clipboard-list fa-3x text-warning mb-3 opacity-50"></i>
                     <h4 class="fw-bold text-dark">No Classes Assigned</h4>
@@ -244,10 +258,10 @@ $is_fully_marked = ($summary['Marked'] === $summary['Total'] && $summary['Total'
                         <form method="GET" id="filterForm" class="row g-3 align-items-end">
                             <div class="col-md-4">
                                 <label class="form-label fw-bold text-secondary">My Classes</label>
-                                <select class="form-select border-primary fw-bold" name="class_id" onchange="document.getElementById('filterForm').submit()">
-                                    <?php foreach($available_classes as $c): ?>
-                                        <option value="<?= $c['id'] ?>" <?= $c['id'] == $selected_class ? 'selected' : '' ?>>
-                                            Class <?= htmlspecialchars($c['class_name']) ?>
+                                <select class="form-select border-primary fw-bold" name="class_section" onchange="document.getElementById('filterForm').submit()">
+                                    <?php foreach($available_class_sections as $c): ?>
+                                        <option value="<?= $c['class_id'] ?>|<?= $c['section_id'] ?>" <?= ($c['class_id'] == $selected_class && (int)$c['section_id'] == $selected_section) ? 'selected' : '' ?>>
+                                            Class <?= htmlspecialchars($c['class_name']) ?><?= $c['section_name'] ? ' (' . htmlspecialchars($c['section_name']) . ')' : '' ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
@@ -297,7 +311,7 @@ $is_fully_marked = ($summary['Marked'] === $summary['Total'] && $summary['Total'
                 <div class="card shadow mb-4 border-0 rounded-3">
                     <div class="card-header py-3 bg-white d-flex justify-content-between align-items-center border-bottom">
                         <h6 class="m-0 font-weight-bold text-primary">
-                            <i class="fas fa-clipboard-list me-2"></i> Attendance Register: Class <?= htmlspecialchars($selected_class_name) ?> 
+                            <i class="fas fa-clipboard-list me-2"></i> Attendance Register: Class <?= htmlspecialchars($selected_class_name) ?><?= $selected_section_name ? ' (' . htmlspecialchars($selected_section_name) . ')' : '' ?>
                             <span class="badge bg-secondary ms-2"><?= date('d M Y', strtotime($selected_date)) ?></span>
                         </h6>
                         <?php if ($is_fully_marked): ?>
@@ -310,6 +324,7 @@ $is_fully_marked = ($summary['Marked'] === $summary['Total'] && $summary['Total'
                     <form method="POST">
                         <input type="hidden" name="action" value="save_attendance">
                         <input type="hidden" name="class_id" value="<?= $selected_class ?>">
+                        <input type="hidden" name="section_id" value="<?= $selected_section ?>">
                         <input type="hidden" name="attendance_date" value="<?= htmlspecialchars($selected_date) ?>">
                         
                         <div class="card-body p-0">

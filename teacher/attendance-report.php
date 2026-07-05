@@ -51,14 +51,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $att_date = $_POST['edit_date'];
     $status = $_POST['edit_status'];
     $class_id = $_POST['edit_class_id'];
+    $section_id = $_POST['edit_section_id'] !== '' ? (int)$_POST['edit_section_id'] : null;
 
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO student_attendance (student_id, class_id, attendance_date, status, marked_by) 
-            VALUES (?, ?, ?, ?, ?) 
-            ON DUPLICATE KEY UPDATE status = VALUES(status), marked_by = VALUES(marked_by)
+            INSERT INTO student_attendance (student_id, class_id, section_id, attendance_date, status, marked_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE status = VALUES(status), marked_by = VALUES(marked_by), section_id = VALUES(section_id)
         ");
-        $stmt->execute([$student_id, $class_id, $att_date, $status, $teacher_user_id]);
+        $stmt->execute([$student_id, $class_id, $section_id, $att_date, $status, $teacher_user_id]);
         $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible shadow-sm"><i class="fas fa-check-circle me-2"></i>Attendance updated for ' . date('d M', strtotime($att_date)) . '!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
     } catch (Exception $e) {
         $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible shadow-sm"><i class="fas fa-times-circle me-2"></i>Error: ' . $e->getMessage() . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
@@ -68,26 +69,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // Fetch available classes assigned to THIS teacher
-$available_classes = [];
+$available_class_sections = [];
 try {
     $stmt_classes = $pdo->prepare("
-        SELECT DISTINCT c.id, c.class_name 
-        FROM teacher_class_assignments tca 
-        JOIN classes c ON tca.class_id = c.id 
+        SELECT DISTINCT c.id AS class_id, c.class_name, IFNULL(tca.section_id, 0) AS section_id, sec.section_name
+        FROM teacher_class_assignments tca
+        JOIN classes c ON tca.class_id = c.id
+        LEFT JOIN sections sec ON tca.section_id = sec.id
         WHERE tca.teacher_user_id = ? OR tca.teacher_user_id = ?
-        ORDER BY c.id
+        ORDER BY c.class_name, sec.section_name
     ");
     $stmt_classes->execute([$teacher_user_id, $teacher_details_id]);
-    $available_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
+    $available_class_sections = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
 
 // Setup Filters
-$selected_class = $_GET['class_id'] ?? ($available_classes[0]['id'] ?? 0);
+[$selected_class, $selected_section] = array_pad(explode('|', $_GET['class_section'] ?? ''), 2, null);
+if ($selected_class === null || $selected_class === '') {
+    $selected_class = $available_class_sections[0]['class_id'] ?? 0;
+    $selected_section = $available_class_sections[0]['section_id'] ?? 0;
+}
+$selected_section = (int)$selected_section;
 $selected_month = $_GET['month'] ?? date('Y-m'); // Default to current month
 $selected_class_name = '';
+$selected_section_name = '';
 
-foreach($available_classes as $c) {
-    if ($c['id'] == $selected_class) { $selected_class_name = $c['class_name']; break; }
+foreach($available_class_sections as $c) {
+    if ($c['class_id'] == $selected_class && (int)$c['section_id'] == $selected_section) {
+        $selected_class_name = $c['class_name'];
+        $selected_section_name = $c['section_name'];
+        break;
+    }
 }
 
 $days_in_month = date('t', strtotime($selected_month . '-01'));
@@ -107,22 +119,23 @@ if ($selected_class) {
         }
 
         $stmt_students = $pdo->prepare("
-            SELECT u.id, u.user_id_string, u.full_name, sd.father_name 
+            SELECT u.id, u.user_id_string, u.full_name, sd.father_name
             FROM users u
             JOIN roles r ON u.role_id = r.id
             JOIN student_details sd ON u.id = sd.user_id
             WHERE r.role_name = 'Student' AND u.status = 'Active' AND sd.class_id = ?
+                AND IFNULL(sd.section_id, 0) = ?
             ORDER BY u.full_name
         ");
-        $stmt_students->execute([$selected_class]);
+        $stmt_students->execute([$selected_class, $selected_section]);
         $students = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
 
         $stmt_att = $pdo->prepare("
-            SELECT student_id, DAY(attendance_date) as day, status 
-            FROM student_attendance 
-            WHERE class_id = ? AND DATE_FORMAT(attendance_date, '%Y-%m') = ?
+            SELECT student_id, DAY(attendance_date) as day, status
+            FROM student_attendance
+            WHERE class_id = ? AND IFNULL(section_id, 0) = ? AND DATE_FORMAT(attendance_date, '%Y-%m') = ?
         ");
-        $stmt_att->execute([$selected_class, $selected_month]);
+        $stmt_att->execute([$selected_class, $selected_section, $selected_month]);
         $raw_attendance = $stmt_att->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($raw_attendance as $row) {
@@ -205,7 +218,7 @@ if ($selected_class) {
 
             <?= $action_msg ?>
 
-            <?php if (empty($available_classes)): ?>
+            <?php if (empty($available_class_sections)): ?>
                 <div class="alert alert-warning border-0 shadow-sm p-4 text-center">
                     <i class="fas fa-clipboard-list fa-3x text-warning mb-3 opacity-50"></i>
                     <h4 class="fw-bold text-dark">No Classes Assigned</h4>
@@ -217,10 +230,10 @@ if ($selected_class) {
                         <form method="GET" id="reportFilterForm" class="row g-3 align-items-end">
                             <div class="col-md-4">
                                 <label class="form-label fw-bold text-secondary">My Classes</label>
-                                <select class="form-select border-primary fw-bold" name="class_id" onchange="document.getElementById('reportFilterForm').submit()">
-                                    <?php foreach($available_classes as $c): ?>
-                                        <option value="<?= $c['id'] ?>" <?= $c['id'] == $selected_class ? 'selected' : '' ?>>
-                                            Class <?= htmlspecialchars($c['class_name']) ?>
+                                <select class="form-select border-primary fw-bold" name="class_section" onchange="document.getElementById('reportFilterForm').submit()">
+                                    <?php foreach($available_class_sections as $c): ?>
+                                        <option value="<?= $c['class_id'] ?>|<?= $c['section_id'] ?>" <?= ($c['class_id'] == $selected_class && (int)$c['section_id'] == $selected_section) ? 'selected' : '' ?>>
+                                            Class <?= htmlspecialchars($c['class_name']) ?><?= $c['section_name'] ? ' (' . htmlspecialchars($c['section_name']) . ')' : '' ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
@@ -236,7 +249,7 @@ if ($selected_class) {
                 <div class="card shadow border-0 rounded-3 printable-area">
                     <div class="card-header py-3 bg-white d-flex justify-content-between align-items-center border-bottom">
                         <h6 class="m-0 font-weight-bold text-primary">
-                            Attendance Grid: Class <?= htmlspecialchars($selected_class_name) ?> 
+                            Attendance Grid: Class <?= htmlspecialchars($selected_class_name) ?><?= $selected_section_name ? ' (' . htmlspecialchars($selected_section_name) . ')' : '' ?>
                             <span class="badge bg-secondary ms-2"><?= $month_label ?></span>
                         </h6>
                         <div class="small fw-bold no-print">
@@ -336,6 +349,7 @@ if ($selected_class) {
             <form method="post">
                 <input type="hidden" name="action" value="quick_edit">
                 <input type="hidden" name="edit_class_id" value="<?= $selected_class ?>">
+                <input type="hidden" name="edit_section_id" value="<?= $selected_section ?>">
                 <input type="hidden" name="edit_student_id" id="editStudentId">
                 <input type="hidden" name="edit_date" id="editDate">
                 
