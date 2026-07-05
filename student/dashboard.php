@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 require_once __DIR__ . '/../config/db_config.php'; // Adjust path if needed
 
@@ -122,18 +122,18 @@ try {
     // E. Fetch Pending Assignments & Upcoming Assessments
     $assignments_due = 0;
     if ($class_id > 0) {
-        // Count total pending assignments specifically
-        $stmt_count = $pdo->prepare("SELECT COUNT(*) FROM assessments WHERE class_id = ? AND assessment_type = 'Assignment' AND assessment_date >= CURRENT_DATE");
-        $stmt_count->execute([$class_id]);
+        // Count total pending assignments specifically (scoped to this student's own section)
+        $stmt_count = $pdo->prepare("SELECT COUNT(*) FROM assessments WHERE class_id = ? AND IFNULL(section_id, 0) = ? AND assessment_type = 'Assignment' AND assessment_date >= CURRENT_DATE");
+        $stmt_count->execute([$class_id, (int)$program_id]);
         $assignments_due = $stmt_count->fetchColumn() ?: 0;
         
-        // Fetch all recent and upcoming assessments for timeline
+        // Fetch all recent and upcoming assessments for timeline (scoped to this student's own section)
         $stmt_assess = $pdo->prepare("
             SELECT * FROM assessments 
-            WHERE class_id = ? AND assessment_date >= DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY)
+            WHERE class_id = ? AND IFNULL(section_id, 0) = ? AND assessment_date >= DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY)
             ORDER BY assessment_date ASC LIMIT 10
         ");
-        $stmt_assess->execute([$class_id]);
+        $stmt_assess->execute([$class_id, (int)$program_id]);
         $assessments = $stmt_assess->fetchAll(PDO::FETCH_ASSOC);
         
         foreach ($assessments as $ass) {
@@ -205,7 +205,7 @@ try {
 
                 <div class="welcome-message">
                     <h1 class="h2 font-weight-bold mb-1">Welcome Back, <?= htmlspecialchars($student_name) ?>!</h1>
-                    <p class="lead mb-0"><i class="fas fa-graduation-cap me-2"></i> Here’s a quick look at your academic progress.</p>
+                    <p class="lead mb-0"><i class="fas fa-graduation-cap me-2"></i> Here's a quick look at your academic progress.</p>
                 </div>
 
                 <h2 class="h4 mb-4 text-gray-800"><i class="fas fa-chart-pie me-2 text-primary"></i> Quick Stats</h2>
