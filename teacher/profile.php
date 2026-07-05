@@ -32,12 +32,14 @@ try {
         // Ensure the header variable is the most current name from the DB
         $teacher_name = $teacher['full_name'];
 
-        // Query 2: Get all assigned classes for this teacher
-        $sql_classes = "SELECT c.class_name, c.id AS class_id
+        // Query 2: Get all assigned class/section/subject combinations for this teacher
+        $sql_classes = "SELECT DISTINCT c.class_name, c.id AS class_id, sec.section_name, sub.subject_name
                         FROM classes c
                         JOIN teacher_class_assignments tca ON c.id = tca.class_id
+                        LEFT JOIN sections sec ON tca.section_id = sec.id
+                        LEFT JOIN subjects sub ON tca.subject_id = sub.id
                         WHERE tca.teacher_user_id = :user_db_id
-                        ORDER BY c.class_name";
+                        ORDER BY c.class_name, sec.section_name, sub.subject_name";
         $stmt_classes = $pdo->prepare($sql_classes);
         $stmt_classes->execute(['user_db_id' => $current_user_db_id]);
         $assigned_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
@@ -123,7 +125,12 @@ try {
                                 <div class="list-group">
                                     <?php foreach ($assigned_classes as $class): ?>
                                         <div class="list-group-item d-flex justify-content-between align-items-center">
-                                            <?= htmlspecialchars($class['class_name']) ?>
+                                            <span>
+                                                Class <?= htmlspecialchars($class['class_name']) ?><?= $class['section_name'] ? ' (' . htmlspecialchars($class['section_name']) . ')' : '' ?>
+                                                <?php if ($class['subject_name']): ?>
+                                                    <span class="text-muted small ms-2">— <?= htmlspecialchars($class['subject_name']) ?></span>
+                                                <?php endif; ?>
+                                            </span>
                                             <span class="badge bg-primary rounded-pill">ID: <?= htmlspecialchars($class['class_id']) ?></span>
                                         </div>
                                     <?php endforeach; ?>
