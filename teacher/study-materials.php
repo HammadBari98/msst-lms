@@ -50,6 +50,7 @@ try {
             id INT PRIMARY KEY AUTO_INCREMENT,
             teacher_id INT NOT NULL,
             class_id INT NOT NULL,
+            section_id INT DEFAULT NULL,
             subject_topic VARCHAR(255) NOT NULL,
             title VARCHAR(255) NOT NULL,
             material_type VARCHAR(50) NOT NULL, 
@@ -59,6 +60,10 @@ try {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ");
+    $col_check = $pdo->query("SHOW COLUMNS FROM study_materials LIKE 'section_id'")->fetch();
+    if (!$col_check) {
+        $pdo->exec("ALTER TABLE study_materials ADD COLUMN section_id INT DEFAULT NULL AFTER class_id");
+    }
 } catch (PDOException $e) { /* Ignore if exists */ }
 
 $upload_dir = __DIR__ . '/../uploads/study_materials/';
@@ -72,7 +77,9 @@ if (!file_exists($upload_dir)) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     try {
         if ($_POST['action'] === 'upload_material') {
-            $class_id = intval($_POST['class_selection']);
+            [$class_id, $section_id] = array_pad(explode('|', $_POST['class_selection'] ?? ''), 2, 0);
+            $class_id = (int)$class_id;
+            $section_id = (int)$section_id ?: null;
             $material_type = $_POST['material_type']; // 'File' or 'Link'
             
             $file_name = null;
@@ -122,9 +129,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 }
             }
 
-            $stmt = $pdo->prepare("INSERT INTO study_materials (teacher_id, class_id, subject_topic, title, material_type, file_name, file_path, video_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO study_materials (teacher_id, class_id, section_id, subject_topic, title, material_type, file_name, file_path, video_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
-                $teacher_user_id, $class_id, trim($_POST['subject_topic']), trim($_POST['title']), 
+                $teacher_user_id, $class_id, $section_id, trim($_POST['subject_topic']), trim($_POST['title']), 
                 $material_type, $file_name, $file_path, $video_url
             ]);
             $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible shadow-sm"><i class="fas fa-check-circle me-2"></i>Study material added successfully!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
@@ -159,25 +166,27 @@ if (isset($_SESSION['action_msg'])) {
 // =======================================================
 // 4. FETCH DATA
 // =======================================================
-$my_assigned_classes = [];
+$my_assigned_class_sections = [];
 try {
     $stmt_classes = $pdo->prepare("
-        SELECT DISTINCT c.id as class_id, c.class_name 
+        SELECT DISTINCT c.id AS class_id, c.class_name, IFNULL(tca.section_id, 0) AS section_id, sec.section_name
         FROM teacher_class_assignments tca
         JOIN classes c ON tca.class_id = c.id
+        LEFT JOIN sections sec ON tca.section_id = sec.id
         WHERE tca.teacher_user_id = ? OR tca.teacher_user_id = ?
-        ORDER BY c.class_name
+        ORDER BY c.class_name, sec.section_name
     ");
     $stmt_classes->execute([$teacher_user_id, $teacher_details_id]);
-    $my_assigned_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
+    $my_assigned_class_sections = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
 
 $my_materials = [];
 try {
     $stmt_materials = $pdo->prepare("
-        SELECT sm.*, c.class_name 
+        SELECT sm.*, c.class_name, sec.section_name 
         FROM study_materials sm
         LEFT JOIN classes c ON sm.class_id = c.id
+        LEFT JOIN sections sec ON sm.section_id = sec.id
         WHERE sm.teacher_id = ?
         ORDER BY sm.created_at DESC
     ");
@@ -271,7 +280,7 @@ function getMaterialIcon($type, $filename) {
                                                     <div class="small text-muted"><i class="fas fa-tag me-1"></i><?= htmlspecialchars($mat['subject_topic']) ?></div>
                                                 </td>
                                                 <td>
-                                                    <span class="badge bg-primary px-2 py-1">Class <?= htmlspecialchars($mat['class_name'] ?? 'Unknown') ?></span>
+                                                    <span class="badge bg-primary px-2 py-1">Class <?= htmlspecialchars($mat['class_name'] ?? 'Unknown') ?><?= $mat['section_name'] ? ' (' . htmlspecialchars($mat['section_name']) . ')' : '' ?></span>
                                                 </td>
                                                 <td>
                                                     <?php if($mat['material_type'] == 'Link' || $mat['material_type'] == 'Video'): ?>
@@ -337,8 +346,8 @@ function getMaterialIcon($type, $filename) {
                                 <label class="form-label fw-bold">Select Class <span class="text-danger">*</span></label>
                                 <select class="form-select" name="class_selection" required>
                                     <option value="" disabled selected>Choose a class...</option>
-                                    <?php foreach ($my_assigned_classes as $cls): ?>
-                                        <option value="<?= htmlspecialchars($cls['class_id']) ?>">Class <?= htmlspecialchars($cls['class_name']) ?></option>
+                                    <?php foreach ($my_assigned_class_sections as $cls): ?>
+                                        <option value="<?= $cls['class_id'] ?>|<?= $cls['section_id'] ?>">Class <?= htmlspecialchars($cls['class_name']) ?><?= $cls['section_name'] ? ' (' . htmlspecialchars($cls['section_name']) . ')' : '' ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>

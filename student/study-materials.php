@@ -37,19 +37,21 @@ $error_message = null;
 
 if ($current_user_db_id > 0) {
     try {
-        $stmt_class = $pdo->prepare("SELECT class_id FROM student_details WHERE user_id = ? LIMIT 1");
+        $stmt_class = $pdo->prepare("SELECT class_id, section_id FROM student_details WHERE user_id = ? LIMIT 1");
         $stmt_class->execute([$current_user_db_id]);
-        $student_class_id = $stmt_class->fetchColumn();
+        $student_class_row = $stmt_class->fetch(PDO::FETCH_ASSOC);
+        $student_class_id = $student_class_row['class_id'] ?? 0;
+        $student_section_id = $student_class_row['section_id'] ?? 0;
 
         if ($student_class_id) {
             $stmt_materials = $pdo->prepare("
                 SELECT sm.*, u.full_name as teacher_name 
                 FROM study_materials sm
                 LEFT JOIN users u ON sm.teacher_id = u.id
-                WHERE sm.class_id = ?
+                WHERE sm.class_id = ? AND IFNULL(sm.section_id, 0) = ?
                 ORDER BY sm.created_at DESC
             ");
-            $stmt_materials->execute([$student_class_id]);
+            $stmt_materials->execute([$student_class_id, $student_section_id]);
             $class_materials = $stmt_materials->fetchAll(PDO::FETCH_ASSOC);
         }
     } catch (PDOException $e) {
