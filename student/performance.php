@@ -40,23 +40,24 @@ $grouped_reports = [
 ];
 
 if ($current_user_db_id > 0) {
-    // 1. Get Class
-    $stmt_class = $pdo->prepare("SELECT sd.class_id, c.class_name FROM student_details sd JOIN classes c ON sd.class_id = c.id WHERE sd.user_id = ? LIMIT 1");
+    // 1. Get Class + Section
+    $stmt_class = $pdo->prepare("SELECT sd.class_id, sd.section_id, c.class_name FROM student_details sd JOIN classes c ON sd.class_id = c.id WHERE sd.user_id = ? LIMIT 1");
     $stmt_class->execute([$current_user_db_id]);
     $class_info = $stmt_class->fetch(PDO::FETCH_ASSOC);
-    
+
     if ($class_info) {
         $student_class_id = $class_info['class_id'];
+        $student_section_id = (int)($class_info['section_id'] ?? 0);
         $class_name = $class_info['class_name'];
 
-        // 2. Find all Official Exams for this class
+        // 2. Find all Official Exams for this class + section
         $stmt_exams = $pdo->prepare("
-            SELECT DISTINCT assessment_type, DATE_FORMAT(assessment_date, '%Y-%m') as exam_month 
-            FROM assessments 
-            WHERE class_id = ?
+            SELECT DISTINCT assessment_type, DATE_FORMAT(assessment_date, '%Y-%m') as exam_month
+            FROM assessments
+            WHERE class_id = ? AND IFNULL(section_id, 0) = ?
             ORDER BY exam_month DESC
         ");
-        $stmt_exams->execute([$student_class_id]);
+        $stmt_exams->execute([$student_class_id, $student_section_id]);
         $available_exams = $stmt_exams->fetchAll(PDO::FETCH_ASSOC);
 
         // 3. Process each exam
@@ -67,9 +68,9 @@ if ($current_user_db_id > 0) {
             // Determine Grouping Category
             $category = in_array($type, ['Monthly Test', 'Mid Term', 'Final Exam']) ? $type : 'Other';
 
-            // Get Subjects & Max Marks
-            $stmt_assm = $pdo->prepare("SELECT id, subject_name, total_marks FROM assessments WHERE class_id = ? AND assessment_type = ? AND assessment_date LIKE ? ORDER BY subject_name ASC");
-            $stmt_assm->execute([$student_class_id, $type, $month . '%']);
+            // Get Subjects & Max Marks (scoped to this student's own section, so rank is computed against section-mates only)
+            $stmt_assm = $pdo->prepare("SELECT id, subject_name, total_marks FROM assessments WHERE class_id = ? AND IFNULL(section_id, 0) = ? AND assessment_type = ? AND assessment_date LIKE ? ORDER BY subject_name ASC");
+            $stmt_assm->execute([$student_class_id, $student_section_id, $type, $month . '%']);
             $assessments = $stmt_assm->fetchAll(PDO::FETCH_ASSOC);
 
             if (empty($assessments)) continue;
