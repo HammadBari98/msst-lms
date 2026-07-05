@@ -12,14 +12,15 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
 
 // Fetch all active students for the Directory View
 $stmt_students = $pdo->query("
-    SELECT u.id, u.full_name, u.user_id_string, c.class_name,
+    SELECT u.id, u.full_name, u.user_id_string, c.class_name, sec.section_name,
            (SELECT COUNT(*) FROM student_scores WHERE student_id = u.id) as total_assessments
-    FROM users u 
+    FROM users u
     JOIN roles r ON u.role_id = r.id
-    LEFT JOIN student_details sd ON u.id = sd.user_id 
-    LEFT JOIN classes c ON sd.class_id = c.id 
-    WHERE r.role_name = 'Student' AND u.status = 'Active' 
-    ORDER BY c.class_name, u.full_name
+    LEFT JOIN student_details sd ON u.id = sd.user_id
+    LEFT JOIN classes c ON sd.class_id = c.id
+    LEFT JOIN sections sec ON sd.section_id = sec.id
+    WHERE r.role_name = 'Student' AND u.status = 'Active'
+    ORDER BY c.class_name, sec.section_name, u.full_name
 ");
 $all_students = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
 
@@ -33,10 +34,11 @@ $total_obtained = 0;
 if ($selected_student_id) {
     // Get the selected student's basic info
     $stmt_info = $pdo->prepare("
-        SELECT u.full_name, u.user_id_string, c.class_name 
-        FROM users u 
-        LEFT JOIN student_details sd ON u.id = sd.user_id 
-        LEFT JOIN classes c ON sd.class_id = c.id 
+        SELECT u.full_name, u.user_id_string, c.class_name, sec.section_name
+        FROM users u
+        LEFT JOIN student_details sd ON u.id = sd.user_id
+        LEFT JOIN classes c ON sd.class_id = c.id
+        LEFT JOIN sections sec ON sd.section_id = sec.id
         WHERE u.id = ?
     ");
     $stmt_info->execute([$selected_student_id]);
@@ -113,7 +115,7 @@ if ($selected_student_id) {
                                     <tr>
                                         <td><?= htmlspecialchars($st['user_id_string']) ?></td>
                                         <td class="fw-bold text-dark"><?= htmlspecialchars($st['full_name']) ?></td>
-                                        <td>Class <?= htmlspecialchars($st['class_name']) ?></td>
+                                        <td>Class <?= htmlspecialchars($st['class_name']) . ($st['section_name'] ? ' (' . htmlspecialchars($st['section_name']) . ')' : '') ?></td>
                                         <td class="text-center">
                                             <span class="badge bg-<?= $st['total_assessments'] > 0 ? 'info' : 'secondary' ?> fs-6">
                                                 <?= $st['total_assessments'] ?>
@@ -169,7 +171,7 @@ if ($selected_student_id) {
                         <h6 class="m-0 font-weight-bold text-primary">
                             Scores for: <?= htmlspecialchars($student_info['full_name']) ?> (ID: <?= htmlspecialchars($student_info['user_id_string']) ?>)
                         </h6>
-                        <span class="badge bg-dark">Class <?= htmlspecialchars($student_info['class_name']) ?></span>
+                        <span class="badge bg-dark">Class <?= htmlspecialchars($student_info['class_name']) . ($student_info['section_name'] ? ' (' . htmlspecialchars($student_info['section_name']) . ')' : '') ?></span>
                     </div>
                     <div class="card-body">
                         <?php if (count($student_scores) > 0): ?>

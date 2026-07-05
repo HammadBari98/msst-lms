@@ -96,11 +96,12 @@ try {
 
     // 5. Fetch All Active Students
     $stmt_students = $pdo->query("
-        SELECT u.id, u.user_id_string, u.full_name, u.profile_picture, sd.father_name, c.class_name, u.created_at as admission_date
+        SELECT u.id, u.user_id_string, u.full_name, u.profile_picture, sd.father_name, c.class_name, sec.section_name, u.created_at as admission_date
         FROM users u
         JOIN roles r ON u.role_id = r.id
         LEFT JOIN student_details sd ON u.id = sd.user_id
         LEFT JOIN classes c ON sd.class_id = c.id
+        LEFT JOIN sections sec ON sd.section_id = sec.id
         WHERE r.role_name = 'Student' AND u.status = 'Active'
         ORDER BY u.full_name ASC
     ");
@@ -445,7 +446,7 @@ if (isset($_SESSION['action_msg'])) {
                                         data-id_str="<?= htmlspecialchars($std['user_id_string'] ?? 'N/A') ?>"
                                         data-name="<?= htmlspecialchars($std['full_name']) ?>"
                                         data-fname="<?= htmlspecialchars($std['father_name'] ?? 'N/A') ?>"
-                                        data-class="<?= htmlspecialchars($std['class_name'] ?? 'N/A') ?>"
+                                        data-class="<?= htmlspecialchars($std['class_name'] ?? 'N/A') . ($std['section_name'] ? ' (' . htmlspecialchars($std['section_name']) . ')' : '') ?>"
                                         data-session="<?= $issueYear . ' - ' . $expiryYear ?>"
                                         data-issue="Aug <?= $issueYear ?>"
                                         data-expiry="Aug <?= $expiryYear ?>"
