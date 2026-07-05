@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     } catch (Exception $e) {
         $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible shadow-sm"><i class="fas fa-times-circle me-2"></i>Error: ' . $e->getMessage() . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
     }
-    header("Location: attendance-report.php?class_id=$class_id&month=" . substr($att_date, 0, 7));
+    header("Location: attendance-report.php?class_section=" . urlencode($class_id . '|' . $section_id) . "&month=" . substr($att_date, 0, 7));
     exit;
 }
 
