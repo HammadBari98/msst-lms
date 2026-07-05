@@ -52,6 +52,7 @@ try {
             id INT PRIMARY KEY AUTO_INCREMENT,
             teacher_id INT NOT NULL,
             class_id INT NOT NULL,
+            section_id INT DEFAULT NULL,
             subject_topic VARCHAR(255) NOT NULL,
             platform VARCHAR(50) NOT NULL,
             meeting_link VARCHAR(500) NOT NULL,
@@ -62,6 +63,10 @@ try {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ");
+    $col_check = $pdo->query("SHOW COLUMNS FROM online_classes LIKE 'section_id'")->fetch();
+    if (!$col_check) {
+        $pdo->exec("ALTER TABLE online_classes ADD COLUMN section_id INT DEFAULT NULL AFTER class_id");
+    }
 } catch (PDOException $e) { /* Ignore if exists */ }
 
 // =======================================================
@@ -70,10 +75,12 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     try {
         if ($_POST['action'] === 'add_class') {
-            $stmt = $pdo->prepare("INSERT INTO online_classes (teacher_id, class_id, subject_topic, platform, meeting_link, meeting_password, class_date, start_time, duration_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            [$class_id, $section_id] = array_pad(explode('|', $_POST['class_id'] ?? ''), 2, 0);
+            $stmt = $pdo->prepare("INSERT INTO online_classes (teacher_id, class_id, section_id, subject_topic, platform, meeting_link, meeting_password, class_date, start_time, duration_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $teacher_user_id,
-                intval($_POST['class_id']),
+                (int)$class_id,
+                (int)$section_id ?: null,
                 trim($_POST['subject_topic']),
                 trim($_POST['platform']),
                 trim($_POST['meeting_link']),
@@ -103,25 +110,27 @@ if (isset($_SESSION['action_msg'])) {
 // =======================================================
 // 4. FETCH DATA
 // =======================================================
-$my_assigned_classes = [];
+$my_assigned_class_sections = [];
 try {
     $stmt_classes = $pdo->prepare("
-        SELECT DISTINCT c.id as class_id, c.class_name 
+        SELECT DISTINCT c.id AS class_id, c.class_name, IFNULL(tca.section_id, 0) AS section_id, sec.section_name
         FROM teacher_class_assignments tca
         JOIN classes c ON tca.class_id = c.id
+        LEFT JOIN sections sec ON tca.section_id = sec.id
         WHERE tca.teacher_user_id = ? OR tca.teacher_user_id = ?
-        ORDER BY c.class_name
+        ORDER BY c.class_name, sec.section_name
     ");
     $stmt_classes->execute([$teacher_user_id, $teacher_details_id]);
-    $my_assigned_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
+    $my_assigned_class_sections = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
 
 $scheduled_classes = [];
 try {
     $stmt_classes = $pdo->prepare("
-        SELECT oc.*, c.class_name 
+        SELECT oc.*, c.class_name, sec.section_name
         FROM online_classes oc
         JOIN classes c ON oc.class_id = c.id
+        LEFT JOIN sections sec ON oc.section_id = sec.id
         WHERE oc.teacher_id = ?
         ORDER BY oc.class_date DESC, oc.start_time DESC
     ");
@@ -207,7 +216,7 @@ function getPlatformBadge($platform) {
                                                 <td>
                                                     <div class="fw-bold text-dark"><?= htmlspecialchars($cls['subject_topic']) ?></div>
                                                 </td>
-                                                <td><span class="badge bg-secondary">Class <?= htmlspecialchars($cls['class_name']) ?></span></td>
+                                                <td><span class="badge bg-secondary">Class <?= htmlspecialchars($cls['class_name']) ?><?= $cls['section_name'] ? ' (' . htmlspecialchars($cls['section_name']) . ')' : '' ?></span></td>
                                                 <td><?= getPlatformBadge($cls['platform']) ?></td>
                                                 <td>
                                                     <a href="<?= htmlspecialchars($cls['meeting_link']) ?>" target="_blank" class="btn btn-sm btn-outline-primary shadow-sm rounded-pill px-3">
@@ -261,8 +270,8 @@ function getPlatformBadge($platform) {
                                 <label class="form-label fw-bold">Select Class <span class="text-danger">*</span></label>
                                 <select class="form-select" name="class_id" required>
                                     <option value="" disabled selected>Choose a class...</option>
-                                    <?php foreach ($my_assigned_classes as $ac): ?>
-                                        <option value="<?= htmlspecialchars($ac['class_id']) ?>">Class <?= htmlspecialchars($ac['class_name']) ?></option>
+                                    <?php foreach ($my_assigned_class_sections as $ac): ?>
+                                        <option value="<?= $ac['class_id'] ?>|<?= $ac['section_id'] ?>">Class <?= htmlspecialchars($ac['class_name']) ?><?= $ac['section_name'] ? ' (' . htmlspecialchars($ac['section_name']) . ')' : '' ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>

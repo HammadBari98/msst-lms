@@ -38,6 +38,7 @@ try {
             id INT PRIMARY KEY AUTO_INCREMENT,
             teacher_id INT NOT NULL,
             class_id INT NOT NULL,
+            section_id INT DEFAULT NULL,
             subject_topic VARCHAR(255) NOT NULL,
             platform VARCHAR(50) NOT NULL,
             meeting_link VARCHAR(500) NOT NULL,
@@ -48,6 +49,10 @@ try {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ");
+    $col_check = $pdo->query("SHOW COLUMNS FROM online_classes LIKE 'section_id'")->fetch();
+    if (!$col_check) {
+        $pdo->exec("ALTER TABLE online_classes ADD COLUMN section_id INT DEFAULT NULL AFTER class_id");
+    }
 } catch (PDOException $e) { /* Ignore if exists */ }
 
 // =======================================================
@@ -60,21 +65,23 @@ $error_message = null;
 if ($current_user_db_id > 0) {
     try {
         // Find which class this student belongs to
-        $stmt_class = $pdo->prepare("SELECT class_id FROM student_details WHERE user_id = ? LIMIT 1");
+        $stmt_class = $pdo->prepare("SELECT class_id, section_id FROM student_details WHERE user_id = ? LIMIT 1");
         $stmt_class->execute([$current_user_db_id]);
-        $student_class_id = $stmt_class->fetchColumn();
+        $student_class_row = $stmt_class->fetch(PDO::FETCH_ASSOC);
+        $student_class_id = $student_class_row['class_id'] ?? 0;
+        $student_section_id = $student_class_row['section_id'] ?? 0;
 
         if ($student_class_id) {
-            // Fetch ONLY the online classes assigned to this specific class
+            // Fetch ONLY the online classes assigned to this specific class + section
             // Only fetch classes from TODAY onwards (don't show old expired links)
             $stmt_plans = $pdo->prepare("
                 SELECT oc.*, u.full_name as teacher_name 
                 FROM online_classes oc
                 LEFT JOIN users u ON oc.teacher_id = u.id
-                WHERE oc.class_id = ? AND oc.class_date >= CURRENT_DATE()
+                WHERE oc.class_id = ? AND IFNULL(oc.section_id, 0) = ? AND oc.class_date >= CURRENT_DATE()
                 ORDER BY oc.class_date ASC, oc.start_time ASC
             ");
-            $stmt_plans->execute([$student_class_id]);
+            $stmt_plans->execute([$student_class_id, $student_section_id]);
             $scheduled_classes = $stmt_plans->fetchAll(PDO::FETCH_ASSOC);
         }
     } catch (PDOException $e) {
