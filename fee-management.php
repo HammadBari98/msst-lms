@@ -1177,7 +1177,7 @@ function calculateFeeForStudent(student) {
     if (activeComponents && activeComponents.length > 0) {
         activeComponents.forEach(comp => {
             const lower = comp.name.toLowerCase();
-            if (lower.includes('installment charge') || lower.includes('tuition') || lower.includes('monthly') || lower.includes('arrears') || lower.includes('late fee')) return; 
+            if (lower.includes('installment charge') || lower.includes('tuition') || lower.includes('monthly') || lower.includes('arrears') || lower.includes('late fee') || lower === 'lunch fee') return;
             
             let amt = parseFloat(comp.amount);
             
