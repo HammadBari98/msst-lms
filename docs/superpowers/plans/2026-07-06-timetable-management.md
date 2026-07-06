@@ -1,0 +1,1105 @@
+# Timetable Management Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Give admin a real timetable builder (`timetable-management.php`) that lets them define the school's shared period structure, active school days, and per-class-section weekly subject/teacher grids — then replace the static dummy `teacher/timetable.php` and `student/timetable.php` pages with real read-only views of that data.
+
+**Architecture:** Three new tables (`timetable_periods`, `school_days`, `timetable_entries`) created via the existing auto-patcher convention. Admin gets one new page with two areas: a small settings panel (periods + active days, CRUD via fetch/JSON, mirroring the pattern already proven in `class-management.php`) and a grid editor (pick a class+section via GET reload, edit each day×period cell inline, save via fetch/JSON). Teacher and student pages are pure read-only queries against `timetable_entries`, following the same session-ID-resolution and section-scoping patterns already used throughout this codebase (`teacher/manage-scores.php`, `student/study-materials.php`).
+
+**Tech Stack:** PHP 8 / PDO / MySQL (MariaDB via XAMPP), no ORM, no automated test framework — verification is manual (curl against XAMPP Apache + direct MySQL queries), same as the rest of this codebase.
+
+## Global Constraints
+
+- **Auto-patcher convention:** all three new tables are created via `try { $pdo->exec("CREATE TABLE IF NOT EXISTS ...") } catch (PDOException $e) {}` blocks at the top of `timetable-management.php` only. Teacher/student pages just query — they never attempt to create tables.
+- **NULL-vs-0 rule:** `section_id` stays nullable (matches every other table in this codebase — `assessments.section_id`, `study_materials.section_id`, etc.). Any comparison against it uses `IFNULL(x,0) = IFNULL(y,0)`.
+- **No unique-key upsert:** because `section_id` is nullable, do NOT rely on a SQL `UNIQUE KEY` + `ON DUPLICATE KEY UPDATE` for `timetable_entries` (MySQL treats each `NULL` as distinct for uniqueness purposes, which would silently allow duplicate rows for sectionless classes). Instead, every save to a cell is a `DELETE` (matched via `IFNULL` comparison) immediately followed by an `INSERT` — same two-statement approach already used elsewhere in this codebase for tables with nullable `section_id`.
+- **Combo value convention:** the class+section picker on the admin grid page uses the same pipe-joined `class_id|section_id` value convention as `teacher-management.php`/`teacher/attendance-management.php`, parsed via `array_pad(explode('|', $_GET['class_section'] ?? ''), 2, null)`.
+- **AJAX convention:** all CRUD actions (`save_period`, `delete_period`, `toggle_day`, `save_entry`, `delete_entry`) are POST requests returning `application/json`, called via `fetch()` + `FormData`, mirroring the exact pattern already in `class-management.php` (`handleAjaxForm`, `showAlert`, etc.) — no full-page form submits, no page reload on save.
+- **Restricted pickers:** the subject `<select>` in each grid cell only lists subjects assigned to that section (via `program_subjects`); the teacher `<select>` only lists teachers assigned to that class+section+subject (via `teacher_class_assignments`). Populated via a JSON map embedded in the page at load time (`teachersBySubject`), not a separate AJAX round-trip per cell — the data set per section is small.
+- **Double-booking:** warn, never block. `save_entry` always performs the save; it additionally checks whether the same `teacher_user_id` already has an entry at the same `day_name`+`period_id` in a *different* class/section, and if so returns `{"success": true, "conflict": "<message>"}` instead of `{"success": true, "conflict": null}`.
+- **Teacher/student ID resolution:** teacher pages resolve `$_SESSION['teacher_id']` (string, e.g. `TEA-38371`) to a numeric `users.id` via `SELECT id FROM users WHERE id = ? OR user_id_string = ?` — the exact pattern already in `teacher/manage-scores.php:13-16`. Student pages resolve `$_SESSION['student_id']` via `SELECT id FROM users WHERE user_id_string = ?` — the exact pattern already in `student/study-materials.php:17-21`.
+- **Sidebar convention:** new/uncommented nav links use the existing `<li><a href="...">...</a></li>` markup style already in each panel's `sidebar.php` — no new CSS classes.
+
+---
+
+### Task 1: Schema + Period/School-Day settings panel
+
+**Files:**
+- Create: `timetable-management.php`
+
+**Interfaces:**
+- Produces: `timetable_periods` table (`id, period_number, start_time, end_time, is_break, label`), `school_days` table (`id, day_name, day_order, is_active`), `timetable_entries` table (`id, class_id, section_id, day_name, period_id, subject_id, teacher_user_id, room`) — Task 2 reads/writes `timetable_entries` and reads `timetable_periods`/`school_days`; Task 4 and Task 5 read all three.
+
+- [ ] **Step 1: Create the file with auth check, auto-patcher, and settings CRUD handlers**
+
+Create `timetable-management.php`:
+
+```php
+<?php
+session_start();
+require_once __DIR__ . '/config/db_config.php';
+
+if (!isset($_SESSION['admin_logged_in'])) {
+    header('Location: login.php');
+    exit;
+}
+
+$admin_name = $_SESSION['admin_name'] ?? 'Admin';
+
+// =======================================================
+// AUTO-PATCHER: Timetable tables
+// =======================================================
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS timetable_periods (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            period_number INT NOT NULL,
+            start_time TIME NOT NULL,
+            end_time TIME NOT NULL,
+            is_break TINYINT(1) NOT NULL DEFAULT 0,
+            label VARCHAR(100) NOT NULL DEFAULT ''
+        )
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS school_days (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            day_name VARCHAR(20) NOT NULL UNIQUE,
+            day_order INT NOT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1
+        )
+    ");
+    if ((int)$pdo->query("SELECT COUNT(*) FROM school_days")->fetchColumn() === 0) {
+        $default_days = ['Monday' => 1, 'Tuesday' => 2, 'Wednesday' => 3, 'Thursday' => 4, 'Friday' => 5, 'Saturday' => 6, 'Sunday' => 7];
+        $ins = $pdo->prepare("INSERT INTO school_days (day_name, day_order, is_active) VALUES (?, ?, ?)");
+        foreach ($default_days as $name => $order) {
+            $ins->execute([$name, $order, $order <= 6 ? 1 : 0]);
+        }
+    }
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS timetable_entries (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            class_id INT NOT NULL,
+            section_id INT NULL,
+            day_name VARCHAR(20) NOT NULL,
+            period_id INT NOT NULL,
+            subject_id INT NOT NULL,
+            teacher_user_id INT NOT NULL,
+            room VARCHAR(100) NULL
+        )
+    ");
+} catch (PDOException $e) { /* Ignore if already exists */ }
+
+// =======================================================
+// AJAX HANDLERS: Period & School Day settings
+// =======================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    header('Content-Type: application/json');
+    try {
+        if ($_POST['action'] === 'save_period') {
+            $id = $_POST['period_id'] ?? '';
+            $period_number = (int)$_POST['period_number'];
+            $start_time = $_POST['start_time'];
+            $end_time = $_POST['end_time'];
+            $is_break = isset($_POST['is_break']) ? 1 : 0;
+            $label = trim($_POST['label']);
+
+            if ($id !== '') {
+                $pdo->prepare("UPDATE timetable_periods SET period_number=?, start_time=?, end_time=?, is_break=?, label=? WHERE id=?")
+                    ->execute([$period_number, $start_time, $end_time, $is_break, $label, (int)$id]);
+            } else {
+                $pdo->prepare("INSERT INTO timetable_periods (period_number, start_time, end_time, is_break, label) VALUES (?, ?, ?, ?, ?)")
+                    ->execute([$period_number, $start_time, $end_time, $is_break, $label]);
+            }
+            echo json_encode(['success' => true]); exit;
+        }
+        if ($_POST['action'] === 'delete_period') {
+            $pdo->prepare("DELETE FROM timetable_periods WHERE id = ?")->execute([(int)$_POST['period_id']]);
+            $pdo->prepare("DELETE FROM timetable_entries WHERE period_id = ?")->execute([(int)$_POST['period_id']]);
+            echo json_encode(['success' => true]); exit;
+        }
+        if ($_POST['action'] === 'toggle_day') {
+            $pdo->prepare("UPDATE school_days SET is_active = ? WHERE id = ?")
+                ->execute([(int)$_POST['is_active'], (int)$_POST['day_id']]);
+            echo json_encode(['success' => true]); exit;
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]); exit;
+    }
+}
+
+// =======================================================
+// FETCH DATA FOR THE UI
+// =======================================================
+$periods = $pdo->query("SELECT * FROM timetable_periods ORDER BY period_number")->fetchAll(PDO::FETCH_ASSOC);
+$school_days = $pdo->query("SELECT * FROM school_days ORDER BY day_order")->fetchAll(PDO::FETCH_ASSOC);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timetable Management | MSST</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<?php include 'sidebar.php'; ?>
+
+<div id="main-content">
+    <?php include 'header.php'; ?>
+
+    <div class="content-wrapper p-4">
+        <div class="container-fluid">
+            <div id="alert-placeholder"></div>
+            <h1 class="h3 mb-4">Timetable Management</h1>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h6 class="m-0 fw-bold text-primary">Period Settings</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-bordered align-middle" id="periodsTable">
+                        <thead class="table-light">
+                            <tr><th>#</th><th>Start</th><th>End</th><th>Label</th><th>Break?</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($periods as $p): ?>
+                            <tr>
+                                <td><input type="number" class="form-control form-control-sm period-number" value="<?= (int)$p['period_number'] ?>" style="width:70px"></td>
+                                <td><input type="time" class="form-control form-control-sm period-start" value="<?= htmlspecialchars($p['start_time']) ?>"></td>
+                                <td><input type="time" class="form-control form-control-sm period-end" value="<?= htmlspecialchars($p['end_time']) ?>"></td>
+                                <td><input type="text" class="form-control form-control-sm period-label" value="<?= htmlspecialchars($p['label']) ?>"></td>
+                                <td class="text-center"><input type="checkbox" class="form-check-input period-break" <?= $p['is_break'] ? 'checked' : '' ?>></td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary" onclick="savePeriod(this, <?= (int)$p['id'] ?>)"><i class="fas fa-save"></i></button>
+                                    <button class="btn btn-sm btn-danger" onclick="deletePeriod(<?= (int)$p['id'] ?>)"><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <tr>
+                                <td><input type="number" class="form-control form-control-sm period-number" value="<?= count($periods) + 1 ?>" style="width:70px"></td>
+                                <td><input type="time" class="form-control form-control-sm period-start" value="08:00"></td>
+                                <td><input type="time" class="form-control form-control-sm period-end" value="08:45"></td>
+                                <td><input type="text" class="form-control form-control-sm period-label" placeholder="e.g. Period 1 or Lunch"></td>
+                                <td class="text-center"><input type="checkbox" class="form-check-input period-break"></td>
+                                <td><button class="btn btn-sm btn-success" onclick="savePeriod(this, null)"><i class="fas fa-plus"></i> Add</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h6 class="m-0 fw-bold text-primary">Active School Days</h6>
+                </div>
+                <div class="card-body d-flex flex-wrap gap-3">
+                    <?php foreach ($school_days as $d): ?>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="day_<?= (int)$d['id'] ?>" <?= $d['is_active'] ? 'checked' : '' ?>
+                               onchange="toggleDay(<?= (int)$d['id'] ?>, this.checked)">
+                        <label class="form-check-label" for="day_<?= (int)$d['id'] ?>"><?= htmlspecialchars($d['day_name']) ?></label>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function showAlert(msg, type) {
+    const p = document.getElementById('alert-placeholder');
+    p.innerHTML = `<div class="alert alert-${type} alert-dismissible shadow-sm">${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+    setTimeout(() => p.innerHTML = '', 5000);
+}
+
+async function savePeriod(btn, periodId) {
+    const row = btn.closest('tr');
+    const fd = new FormData();
+    fd.append('action', 'save_period');
+    if (periodId !== null) fd.append('period_id', periodId);
+    fd.append('period_number', row.querySelector('.period-number').value);
+    fd.append('start_time', row.querySelector('.period-start').value);
+    fd.append('end_time', row.querySelector('.period-end').value);
+    fd.append('label', row.querySelector('.period-label').value);
+    if (row.querySelector('.period-break').checked) fd.append('is_break', '1');
+
+    const res = await fetch('timetable-management.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) { location.reload(); } else { showAlert(data.message, 'danger'); }
+}
+
+async function deletePeriod(periodId) {
+    if (!confirm('Delete this period? Any timetable entries using it will also be removed.')) return;
+    const fd = new FormData();
+    fd.append('action', 'delete_period');
+    fd.append('period_id', periodId);
+    const res = await fetch('timetable-management.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) { location.reload(); } else { showAlert(data.message, 'danger'); }
+}
+
+async function toggleDay(dayId, isActive) {
+    const fd = new FormData();
+    fd.append('action', 'toggle_day');
+    fd.append('day_id', dayId);
+    fd.append('is_active', isActive ? '1' : '0');
+    const res = await fetch('timetable-management.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!data.success) showAlert(data.message, 'danger');
+}
+</script>
+</body>
+</html>
+```
+
+- [ ] **Step 2: Verify tables are created**
+
+Start XAMPP Apache (already running per project convention). Create a disposable admin-session bootstrap script (this project's established pattern for manual role-based testing without browser automation — see `docs/superpowers/plans/2026-07-06-teacher-section-subject-assignment.md` for prior use), then visit the page as admin to trigger the auto-patcher:
+
+```bash
+cat > _t_admin.php <<'EOF'
+<?php
+session_start();
+$_SESSION['admin_logged_in'] = true;
+$_SESSION['admin_id'] = 'ADM001';
+$_SESSION['admin_name'] = 'System Administrator';
+echo "ok";
+EOF
+curl -s -c /tmp/c_admin.txt http://localhost/msst/lms/_t_admin.php
+curl -s -b /tmp/c_admin.txt http://localhost/msst/lms/timetable-management.php -o /tmp/tt_page.html -w "HTTP %{http_code}\n"
+mysql -u root msst_db -e "SHOW TABLES LIKE 'timetable%'; SHOW TABLES LIKE 'school_days'; SELECT * FROM school_days ORDER BY day_order;"
+```
+
+Leave `_t_admin.php` in place on disk (do not delete it) — every later task in this plan needs the same disposable admin-session bootstrap script and will recreate `/tmp/c_admin.txt` from it as needed.
+
+Expected: HTTP 200, three new tables exist, `school_days` has 7 rows (Monday–Saturday active, Sunday inactive).
+
+- [ ] **Step 3: Verify add/edit/delete period and toggle day via curl**
+
+Create the real "Period 1" that Tasks 2, 4, 5, and 6 will all reuse as live seed data — this row is NOT disposable test data and must NOT be deleted at the end of this step:
+
+```bash
+curl -s -b /tmp/c_admin.txt -X POST -d "action=save_period&period_number=1&start_time=08:00&end_time=08:45&label=Period 1" http://localhost/msst/lms/timetable-management.php
+mysql -u root msst_db -e "SELECT * FROM timetable_periods;"
+PID=$(mysql -u root msst_db -N -e "SELECT id FROM timetable_periods WHERE label='Period 1';")
+```
+
+Expected: `{"success":true}`, one row in `timetable_periods` with `label='Period 1'`. Keep the `$PID` value — every later task's verification steps reference this same period.
+
+Verify edit works, using the same persistent period (this leaves it correctly edited, not deleted):
+
+```bash
+curl -s -b /tmp/c_admin.txt -X POST -d "action=save_period&period_id=$PID&period_number=1&start_time=08:00&end_time=08:45&label=Period 1" http://localhost/msst/lms/timetable-management.php
+mysql -u root msst_db -e "SELECT label FROM timetable_periods WHERE id=$PID;"
+```
+
+Expected: `{"success":true}`, label still `Period 1`.
+
+Verify delete works using a separate, disposable second period so `$PID`/"Period 1" is left intact for later tasks:
+
+```bash
+curl -s -b /tmp/c_admin.txt -X POST -d "action=save_period&period_number=99&start_time=15:00&end_time=15:45&label=ZZ Test Period" http://localhost/msst/lms/timetable-management.php
+ZPID=$(mysql -u root msst_db -N -e "SELECT id FROM timetable_periods WHERE label='ZZ Test Period';")
+curl -s -b /tmp/c_admin.txt -X POST -d "action=delete_period&period_id=$ZPID" http://localhost/msst/lms/timetable-management.php
+mysql -u root msst_db -e "SELECT COUNT(*) FROM timetable_periods WHERE id=$ZPID; SELECT COUNT(*) FROM timetable_periods WHERE id=$PID;"
+```
+
+Expected: the `ZZ Test Period` row count is 0 after delete; the original `$PID` ("Period 1") row count is still 1.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add timetable-management.php
+git commit -m "Add timetable schema and period/school-day settings panel"
+```
+
+---
+
+### Task 2: Class+section timetable grid (view + edit + save/delete)
+
+**Files:**
+- Modify: `timetable-management.php`
+
+**Interfaces:**
+- Consumes: `timetable_periods`, `school_days` tables from Task 1.
+- Produces: `timetable_entries` rows readable by Task 4 (teacher view) and Task 5 (student view) via `class_id`, `IFNULL(section_id,0)`, `day_name`, `period_id`, `subject_id`, `teacher_user_id`, `room`.
+
+- [ ] **Step 1: Add `save_entry`/`delete_entry` AJAX handlers**
+
+In `timetable-management.php`, inside the existing `if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']))` block (added in Task 1), add these two branches before the closing `catch`:
+
+```php
+        if ($_POST['action'] === 'save_entry') {
+            $class_id = (int)$_POST['class_id'];
+            $section_id = $_POST['section_id'] !== '' ? (int)$_POST['section_id'] : null;
+            $day_name = $_POST['day_name'];
+            $period_id = (int)$_POST['period_id'];
+            $subject_id = (int)$_POST['subject_id'];
+            $teacher_user_id = (int)$_POST['teacher_user_id'];
+            $room = trim($_POST['room'] ?? '') ?: null;
+
+            $pdo->beginTransaction();
+            $del = $pdo->prepare("DELETE FROM timetable_entries WHERE class_id = ? AND IFNULL(section_id,0) = IFNULL(?,0) AND day_name = ? AND period_id = ?");
+            $del->execute([$class_id, $section_id, $day_name, $period_id]);
+            $ins = $pdo->prepare("INSERT INTO timetable_entries (class_id, section_id, day_name, period_id, subject_id, teacher_user_id, room) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $ins->execute([$class_id, $section_id, $day_name, $period_id, $subject_id, $teacher_user_id, $room]);
+            $pdo->commit();
+
+            $conflict = null;
+            $stmt_conflict = $pdo->prepare("
+                SELECT c.class_name, sec.section_name
+                FROM timetable_entries te
+                JOIN classes c ON c.id = te.class_id
+                LEFT JOIN sections sec ON sec.id = te.section_id
+                WHERE te.teacher_user_id = ? AND te.day_name = ? AND te.period_id = ?
+                  AND NOT (te.class_id = ? AND IFNULL(te.section_id,0) = IFNULL(?,0))
+            ");
+            $stmt_conflict->execute([$teacher_user_id, $day_name, $period_id, $class_id, $section_id]);
+            $conflict_row = $stmt_conflict->fetch(PDO::FETCH_ASSOC);
+            if ($conflict_row) {
+                $conflict = "This teacher is already teaching Class {$conflict_row['class_name']}" .
+                    ($conflict_row['section_name'] ? " ({$conflict_row['section_name']})" : "") .
+                    " at this same day and period.";
+            }
+
+            echo json_encode(['success' => true, 'conflict' => $conflict]); exit;
+        }
+        if ($_POST['action'] === 'delete_entry') {
+            $class_id = (int)$_POST['class_id'];
+            $section_id = $_POST['section_id'] !== '' ? (int)$_POST['section_id'] : null;
+            $pdo->prepare("DELETE FROM timetable_entries WHERE class_id = ? AND IFNULL(section_id,0) = IFNULL(?,0) AND day_name = ? AND period_id = ?")
+                ->execute([$class_id, $section_id, $_POST['day_name'], (int)$_POST['period_id']]);
+            echo json_encode(['success' => true]); exit;
+        }
+```
+
+- [ ] **Step 2: Add class+section picker and grid data fetch**
+
+After the `$school_days = $pdo->query(...)` line added in Task 1, add:
+
+```php
+// Class+Section list for the picker (only sections actually tied to a real class)
+$class_sections = $pdo->query("
+    SELECT c.id AS class_id, c.class_name, sec.id AS section_id, sec.section_name
+    FROM classes c
+    JOIN sections sec ON sec.class_id = c.id
+    ORDER BY c.class_name, sec.section_name
+")->fetchAll(PDO::FETCH_ASSOC);
+
+[$selected_class, $selected_section] = array_pad(explode('|', $_GET['class_section'] ?? ''), 2, null);
+$selected_section = $selected_section !== null && $selected_section !== '' ? (int)$selected_section : null;
+
+$grid_entries = [];       // keyed "day|period_id" => entry row
+$section_subjects = [];   // [{id, subject_name}]
+$teachers_by_subject = []; // subject_id => [{id, full_name}]
+
+if ($selected_class) {
+    $stmt_subjects = $pdo->prepare("
+        SELECT s.id, s.subject_name FROM program_subjects ps
+        JOIN subjects s ON s.id = ps.subject_id
+        WHERE ps.program_id = ?
+        ORDER BY s.subject_name
+    ");
+    $stmt_subjects->execute([$selected_section]);
+    $section_subjects = $stmt_subjects->fetchAll(PDO::FETCH_ASSOC);
+
+    $stmt_teachers = $pdo->prepare("
+        SELECT tca.subject_id, u.id, u.full_name
+        FROM teacher_class_assignments tca
+        JOIN users u ON u.id = tca.teacher_user_id
+        WHERE tca.class_id = ? AND IFNULL(tca.section_id,0) = IFNULL(?,0) AND tca.subject_id IS NOT NULL
+        ORDER BY u.full_name
+    ");
+    $stmt_teachers->execute([(int)$selected_class, $selected_section]);
+    foreach ($stmt_teachers->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $teachers_by_subject[$row['subject_id']][] = ['id' => $row['id'], 'full_name' => $row['full_name']];
+    }
+
+    $stmt_entries = $pdo->prepare("
+        SELECT te.*, s.subject_name, u.full_name AS teacher_name
+        FROM timetable_entries te
+        JOIN subjects s ON s.id = te.subject_id
+        JOIN users u ON u.id = te.teacher_user_id
+        WHERE te.class_id = ? AND IFNULL(te.section_id,0) = IFNULL(?,0)
+    ");
+    $stmt_entries->execute([(int)$selected_class, $selected_section]);
+    foreach ($stmt_entries->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $grid_entries[$row['day_name'] . '|' . $row['period_id']] = $row;
+    }
+}
+
+$active_days = array_filter($school_days, fn($d) => $d['is_active']);
+```
+
+- [ ] **Step 3: Render the picker and grid**
+
+Add this markup right after the "Active School Days" card's closing `</div>` (still inside `.container-fluid`), before the final closing `</div>` of `.content-wrapper`:
+
+```php
+            <div class="card shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h6 class="m-0 fw-bold text-primary">Weekly Timetable</h6>
+                </div>
+                <div class="card-body">
+                    <form method="GET" class="mb-4">
+                        <label class="form-label fw-bold">Class / Section</label>
+                        <select name="class_section" class="form-select" style="max-width:400px" onchange="this.form.submit()">
+                            <option value="">-- Select a class/section --</option>
+                            <?php foreach ($class_sections as $cs): $key = $cs['class_id'] . '|' . $cs['section_id']; ?>
+                                <option value="<?= htmlspecialchars($key) ?>" <?= ($selected_class == $cs['class_id'] && $selected_section == $cs['section_id']) ? 'selected' : '' ?>>
+                                    Class <?= htmlspecialchars($cs['class_name']) ?> (<?= htmlspecialchars($cs['section_name']) ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </form>
+
+                    <?php if (!$selected_class): ?>
+                        <div class="alert alert-info">Select a class/section above to view or edit its timetable.</div>
+                    <?php elseif (empty($periods)): ?>
+                        <div class="alert alert-warning">No periods defined yet — add periods above first.</div>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle text-center">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Period</th>
+                                        <?php foreach ($active_days as $d): ?>
+                                            <th><?= htmlspecialchars($d['day_name']) ?></th>
+                                        <?php endforeach; ?>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($periods as $p): ?>
+                                    <tr>
+                                        <td class="fw-bold"><?= htmlspecialchars($p['label']) ?><br><small class="text-muted"><?= substr($p['start_time'],0,5) ?>-<?= substr($p['end_time'],0,5) ?></small></td>
+                                        <?php if ($p['is_break']): ?>
+                                            <td colspan="<?= count($active_days) ?>" class="bg-light fw-bold text-uppercase text-secondary"><?= htmlspecialchars($p['label']) ?></td>
+                                        <?php else: foreach ($active_days as $d):
+                                            $entry = $grid_entries[$d['day_name'] . '|' . $p['id']] ?? null; ?>
+                                            <td>
+                                                <select class="form-select form-select-sm mb-1 cell-subject" data-day="<?= htmlspecialchars($d['day_name']) ?>" data-period="<?= (int)$p['id'] ?>">
+                                                    <option value="">--</option>
+                                                    <?php foreach ($section_subjects as $sub): ?>
+                                                        <option value="<?= (int)$sub['id'] ?>" <?= ($entry && $entry['subject_id'] == $sub['id']) ? 'selected' : '' ?>><?= htmlspecialchars($sub['subject_name']) ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <select class="form-select form-select-sm mb-1 cell-teacher">
+                                                    <option value="">--</option>
+                                                    <?php if ($entry): ?>
+                                                        <option value="<?= (int)$entry['teacher_user_id'] ?>" selected><?= htmlspecialchars($entry['teacher_name']) ?></option>
+                                                    <?php endif; ?>
+                                                </select>
+                                                <input type="text" class="form-control form-control-sm mb-1 cell-room" placeholder="Room" value="<?= htmlspecialchars($entry['room'] ?? '') ?>">
+                                                <button class="btn btn-sm btn-primary w-100" onclick="saveCell(this)"><i class="fas fa-save"></i></button>
+                                            </td>
+                                        <?php endforeach; endif; ?>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+```
+
+- [ ] **Step 4: Add the client-side subject→teacher map and `saveCell` JS**
+
+Add this right before the closing `</script>` tag (after `toggleDay`):
+
+```javascript
+const teachersBySubject = <?= json_encode($teachers_by_subject) ?>;
+const selectedClass = <?= json_encode($selected_class) ?>;
+const selectedSection = <?= json_encode($selected_section) ?>;
+
+document.querySelectorAll('.cell-subject').forEach(sel => {
+    sel.addEventListener('change', () => {
+        const teacherSelect = sel.closest('td').querySelector('.cell-teacher');
+        const list = teachersBySubject[sel.value] || [];
+        teacherSelect.innerHTML = '<option value="">--</option>' +
+            list.map(t => `<option value="${t.id}">${t.full_name}</option>`).join('');
+    });
+});
+
+async function saveCell(btn) {
+    const td = btn.closest('td');
+    const daySelectEl = td.querySelector('.cell-subject');
+    const subjectId = daySelectEl.value;
+    const teacherId = td.querySelector('.cell-teacher').value;
+    const room = td.querySelector('.cell-room').value;
+
+    if (!subjectId || !teacherId) { showAlert('Select both a subject and a teacher before saving.', 'warning'); return; }
+
+    const fd = new FormData();
+    fd.append('action', 'save_entry');
+    fd.append('class_id', selectedClass);
+    fd.append('section_id', selectedSection ?? '');
+    fd.append('day_name', daySelectEl.dataset.day);
+    fd.append('period_id', daySelectEl.dataset.period);
+    fd.append('subject_id', subjectId);
+    fd.append('teacher_user_id', teacherId);
+    fd.append('room', room);
+
+    const res = await fetch('timetable-management.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+        showAlert(data.conflict ? data.conflict : 'Saved.', data.conflict ? 'warning' : 'success');
+    } else {
+        showAlert(data.message, 'danger');
+    }
+}
+```
+
+- [ ] **Step 5: Verify the full grid flow via curl, including the double-booking warning**
+
+Use two real class/sections and one real teacher from the live DB that are already known-good from prior manual testing in this project (Class 10 / Computer Group = `class_id=2, section_id=16`, subject `Class-10-CS-Group-English` = `subject_id=7`, teacher `TEA-38371` = `user_id=184`, already assigned to that class+section+subject). Re-derive `$PID` from the DB first — it points at the "Period 1" row created in Task 1 Step 3, and shell variables from other tasks are not available in this session:
+
+```bash
+curl -s -c /tmp/c_admin.txt http://localhost/msst/lms/_t_admin.php   # regenerate the cookie from the bootstrap script created in Task 1
+PID=$(mysql -u root msst_db -N -e "SELECT id FROM timetable_periods WHERE label='Period 1';")
+curl -s -b /tmp/c_admin.txt -X POST \
+  -d "action=save_entry&class_id=2&section_id=16&day_name=Monday&period_id=$PID&subject_id=7&teacher_user_id=184&room=Room 101" \
+  http://localhost/msst/lms/timetable-management.php
+mysql -u root msst_db -e "SELECT * FROM timetable_entries WHERE class_id=2 AND section_id=16;"
+```
+
+Expected: `{"success":true,"conflict":null}` (no conflict, first entry for this teacher at this slot), one row in `timetable_entries`.
+
+Now create a second class+section also taught by the same teacher at the same day+period to trigger the conflict warning (reuse teacher 184's other real assignment, e.g. `class_id=3, section_id=10` from `teacher_class_assignments` if one exists, or temporarily assign teacher 184 to a second section for this test and revert afterward — do not permanently alter real assignment data):
+
+```bash
+mysql -u root msst_db -e "SELECT * FROM teacher_class_assignments WHERE teacher_user_id=184;"
+# pick any OTHER real (class_id, section_id, subject_id) row already assigned to teacher 184
+curl -s -b /tmp/c_admin.txt -X POST \
+  -d "action=save_entry&class_id=3&section_id=10&day_name=Monday&period_id=$PID&subject_id=12&teacher_user_id=184&room=Room 202" \
+  http://localhost/msst/lms/timetable-management.php
+```
+
+Expected: `{"success":true,"conflict":"This teacher is already teaching Class ..."}` — save still succeeds, warning is returned.
+
+Clean up both test rows afterward:
+
+```bash
+mysql -u root msst_db -e "DELETE FROM timetable_entries WHERE class_id IN (2,3);"
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add timetable-management.php
+git commit -m "Add class+section timetable grid editor with double-booking warning"
+```
+
+---
+
+### Task 3: Admin sidebar link
+
+**Files:**
+- Modify: `sidebar.php:15`
+
+- [ ] **Step 1: Add the nav link**
+
+In `sidebar.php`, after the line `<li><a href="class-management.php">...Classes & Sections</span></a></li>` (line 15), add:
+
+```php
+        <li><a href="timetable-management.php"><i class="fas fa-calendar-alt fa-fw me-2"></i> <span>Timetable Management</span></a></li>
+```
+
+- [ ] **Step 2: Verify the link appears and navigates correctly**
+
+If `_t_admin.php` (created in Task 1) is not already present in the project root, recreate it first:
+
+```bash
+cat > _t_admin.php <<'EOF'
+<?php
+session_start();
+$_SESSION['admin_logged_in'] = true;
+$_SESSION['admin_id'] = 'ADM001';
+$_SESSION['admin_name'] = 'System Administrator';
+echo "ok";
+EOF
+curl -s -c /tmp/c_admin.txt http://localhost/msst/lms/_t_admin.php
+curl -s -b /tmp/c_admin.txt http://localhost/msst/lms/sidebar.php | grep -o 'timetable-management.php'
+curl -s -o /dev/null -w "%{http_code}\n" -b /tmp/c_admin.txt http://localhost/msst/lms/timetable-management.php
+```
+
+Expected: match found, HTTP 200.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add sidebar.php
+git commit -m "Add Timetable Management link to admin sidebar"
+```
+
+---
+
+### Task 4: Teacher read-only timetable view
+
+**Files:**
+- Modify: `teacher/timetable.php` (replace dummy content entirely)
+- Modify: `teacher/sidebar.php:197-198`
+
+**Interfaces:**
+- Consumes: `timetable_entries`, `timetable_periods`, `school_days` tables from Tasks 1–2.
+
+- [ ] **Step 1: Replace `teacher/timetable.php`**
+
+Replace the entire file with:
+
+```php
+<?php
+session_start();
+require_once __DIR__ . '/../config/db_config.php';
+
+if (!isset($_SESSION['teacher_logged_in'])) {
+    header('Location: login.php');
+    exit();
+}
+
+$teacher_session_id = $_SESSION['teacher_id'];
+$teacher_name = $_SESSION['teacher_name'] ?? 'Teacher';
+
+$stmt_get_id = $pdo->prepare("SELECT id FROM users WHERE id = ? OR user_id_string = ? LIMIT 1");
+$stmt_get_id->execute([$teacher_session_id, $teacher_session_id]);
+$teacher_id = $stmt_get_id->fetchColumn();
+
+$periods = $pdo->query("SELECT * FROM timetable_periods ORDER BY period_number")->fetchAll(PDO::FETCH_ASSOC);
+$active_days = $pdo->query("SELECT * FROM school_days WHERE is_active = 1 ORDER BY day_order")->fetchAll(PDO::FETCH_ASSOC);
+
+$schedule = []; // "day|period_id" => entry
+if ($teacher_id) {
+    $stmt = $pdo->prepare("
+        SELECT te.day_name, te.period_id, te.room, s.subject_name, c.class_name, sec.section_name
+        FROM timetable_entries te
+        JOIN subjects s ON s.id = te.subject_id
+        JOIN classes c ON c.id = te.class_id
+        LEFT JOIN sections sec ON sec.id = te.section_id
+        WHERE te.teacher_user_id = ?
+    ");
+    $stmt->execute([$teacher_id]);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $schedule[$row['day_name'] . '|' . $row['period_id']] = $row;
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Timetable | <?= htmlspecialchars($teacher_name) ?></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<?php include 'sidebar.php'; ?>
+
+<div id="main-content">
+    <?php include 'header.php'; ?>
+
+    <div class="content-wrapper p-4">
+        <div class="container-fluid">
+            <h1 class="h3 mb-4">My Timetable</h1>
+
+            <?php if (empty($periods)): ?>
+                <div class="alert alert-info">The timetable has not been set up yet. Please check back later.</div>
+            <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Period</th>
+                            <?php foreach ($active_days as $d): ?>
+                                <th><?= htmlspecialchars($d['day_name']) ?></th>
+                            <?php endforeach; ?>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($periods as $p): ?>
+                        <tr>
+                            <td class="fw-bold"><?= htmlspecialchars($p['label']) ?><br><small class="text-muted"><?= substr($p['start_time'],0,5) ?>-<?= substr($p['end_time'],0,5) ?></small></td>
+                            <?php if ($p['is_break']): ?>
+                                <td colspan="<?= count($active_days) ?>" class="bg-light fw-bold text-uppercase text-secondary"><?= htmlspecialchars($p['label']) ?></td>
+                            <?php else: foreach ($active_days as $d):
+                                $entry = $schedule[$d['day_name'] . '|' . $p['id']] ?? null; ?>
+                                <td>
+                                    <?php if ($entry): ?>
+                                        <div class="fw-bold"><?= htmlspecialchars($entry['subject_name']) ?></div>
+                                        <div class="small text-muted">Class <?= htmlspecialchars($entry['class_name']) ?><?= $entry['section_name'] ? ' (' . htmlspecialchars($entry['section_name']) . ')' : '' ?></div>
+                                        <?php if ($entry['room']): ?><div class="small text-muted"><?= htmlspecialchars($entry['room']) ?></div><?php endif; ?>
+                                    <?php else: ?>
+                                        <span class="text-muted">&mdash;</span>
+                                    <?php endif; ?>
+                                </td>
+                            <?php endforeach; endif; ?>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+```
+
+- [ ] **Step 2: Uncomment the sidebar link**
+
+In `teacher/sidebar.php`, replace:
+
+```
+    <!-- <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>
+    <li><a href="performance-reports.php"><i class="fas fa-life-ring"></i> <span>Performance Reports</span></a></li> -->
+```
+
+with:
+
+```
+    <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>
+    <!-- <li><a href="performance-reports.php"><i class="fas fa-life-ring"></i> <span>Performance Reports</span></a></li> -->
+```
+
+(only the timetable link is uncommented; `performance-reports.php` stays commented — it's out of scope and remains a dummy page.)
+
+- [ ] **Step 3: Verify against the real test data from Task 2's Step 5**
+
+Re-create the same test entry used in Task 2 Step 5 (teacher 184, class 2, section 16, Monday, the "Period 1" row created in Task 1 Step 3), then check the teacher's page shows it. Re-derive `$PID` from the DB, and create both admin and teacher disposable session bootstrap scripts (shell variables and files from other tasks are not available in this session):
+
+```bash
+cat > _t_admin.php <<'EOF'
+<?php
+session_start();
+$_SESSION['admin_logged_in'] = true;
+$_SESSION['admin_id'] = 'ADM001';
+$_SESSION['admin_name'] = 'System Administrator';
+echo "ok";
+EOF
+cat > _t_teacher.php <<'EOF'
+<?php
+session_start();
+$_SESSION['teacher_logged_in'] = true;
+$_SESSION['teacher_id'] = 'TEA-38371';
+$_SESSION['teacher_name'] = 'test teacher ics 11 class';
+$_SESSION['user_db_id'] = 184;
+echo "ok";
+EOF
+curl -s -c /tmp/c_admin.txt http://localhost/msst/lms/_t_admin.php
+curl -s -c /tmp/c_teacher.txt http://localhost/msst/lms/_t_teacher.php
+
+PID=$(mysql -u root msst_db -N -e "SELECT id FROM timetable_periods WHERE label='Period 1';")
+curl -s -b /tmp/c_admin.txt -X POST \
+  -d "action=save_entry&class_id=2&section_id=16&day_name=Monday&period_id=$PID&subject_id=7&teacher_user_id=184&room=Room 101" \
+  http://localhost/msst/lms/timetable-management.php
+curl -s -b /tmp/c_teacher.txt http://localhost/msst/lms/teacher/timetable.php -o /tmp/teacher_tt.html -w "HTTP %{http_code}\n"
+grep -c "Class-10-CS-Group-English" /tmp/teacher_tt.html
+mysql -u root msst_db -e "DELETE FROM timetable_entries WHERE class_id=2 AND section_id=16;"
+```
+
+Expected: HTTP 200, grep count 1.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add "teacher/timetable.php" "teacher/sidebar.php"
+git commit -m "Replace dummy teacher timetable with real read-only schedule view"
+```
+
+---
+
+### Task 5: Student read-only timetable view
+
+**Files:**
+- Modify: `student/timetable.php` (replace dummy content entirely)
+- Modify: `student/sidebar.php:209`
+
+**Interfaces:**
+- Consumes: `timetable_entries`, `timetable_periods`, `school_days` tables from Tasks 1–2.
+
+- [ ] **Step 1: Replace `student/timetable.php`**
+
+Replace the entire file with:
+
+```php
+<?php
+session_start();
+require_once __DIR__ . '/../config/db_config.php';
+
+if (!isset($_SESSION['student_logged_in'])) {
+    header('Location: login.php');
+    exit();
+}
+
+$student_name = $_SESSION['student_name'] ?? 'Student';
+
+$current_user_db_id = 0;
+if (!empty($_SESSION['student_id'])) {
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE user_id_string = ? LIMIT 1");
+    $stmt->execute([$_SESSION['student_id']]);
+    $current_user_db_id = $stmt->fetchColumn();
+}
+if (!$current_user_db_id && isset($_SESSION['user_db_id'])) {
+    $current_user_db_id = (int)$_SESSION['user_db_id'];
+}
+
+$student_class_id = 0;
+$student_section_id = 0;
+if ($current_user_db_id > 0) {
+    $stmt_class = $pdo->prepare("SELECT class_id, section_id FROM student_details WHERE user_id = ? LIMIT 1");
+    $stmt_class->execute([$current_user_db_id]);
+    $row = $stmt_class->fetch(PDO::FETCH_ASSOC);
+    $student_class_id = $row['class_id'] ?? 0;
+    $student_section_id = $row['section_id'] ?? 0;
+}
+
+$periods = $pdo->query("SELECT * FROM timetable_periods ORDER BY period_number")->fetchAll(PDO::FETCH_ASSOC);
+$active_days = $pdo->query("SELECT * FROM school_days WHERE is_active = 1 ORDER BY day_order")->fetchAll(PDO::FETCH_ASSOC);
+
+$schedule = [];
+if ($student_class_id) {
+    $stmt = $pdo->prepare("
+        SELECT te.day_name, te.period_id, te.room, s.subject_name, u.full_name AS teacher_name
+        FROM timetable_entries te
+        JOIN subjects s ON s.id = te.subject_id
+        JOIN users u ON u.id = te.teacher_user_id
+        WHERE te.class_id = ? AND IFNULL(te.section_id,0) = IFNULL(?,0)
+    ");
+    $stmt->execute([$student_class_id, $student_section_id]);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $schedule[$row['day_name'] . '|' . $row['period_id']] = $row;
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Timetable | <?= htmlspecialchars($student_name) ?></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<?php include 'sidebar.php' ?>
+
+<div id="main-content">
+    <?php include 'header.php' ?>
+
+    <div class="content-wrapper p-4">
+        <div class="container-fluid">
+            <h1 class="h3 mb-4">My Timetable</h1>
+
+            <?php if (empty($periods)): ?>
+                <div class="alert alert-info">The timetable has not been set up yet. Please check back later.</div>
+            <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Period</th>
+                            <?php foreach ($active_days as $d): ?>
+                                <th><?= htmlspecialchars($d['day_name']) ?></th>
+                            <?php endforeach; ?>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($periods as $p): ?>
+                        <tr>
+                            <td class="fw-bold"><?= htmlspecialchars($p['label']) ?><br><small class="text-muted"><?= substr($p['start_time'],0,5) ?>-<?= substr($p['end_time'],0,5) ?></small></td>
+                            <?php if ($p['is_break']): ?>
+                                <td colspan="<?= count($active_days) ?>" class="bg-light fw-bold text-uppercase text-secondary"><?= htmlspecialchars($p['label']) ?></td>
+                            <?php else: foreach ($active_days as $d):
+                                $entry = $schedule[$d['day_name'] . '|' . $p['id']] ?? null; ?>
+                                <td>
+                                    <?php if ($entry): ?>
+                                        <div class="fw-bold"><?= htmlspecialchars($entry['subject_name']) ?></div>
+                                        <div class="small text-muted"><?= htmlspecialchars($entry['teacher_name']) ?></div>
+                                        <?php if ($entry['room']): ?><div class="small text-muted"><?= htmlspecialchars($entry['room']) ?></div><?php endif; ?>
+                                    <?php else: ?>
+                                        <span class="text-muted">&mdash;</span>
+                                    <?php endif; ?>
+                                </td>
+                            <?php endforeach; endif; ?>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+```
+
+- [ ] **Step 2: Uncomment the sidebar link**
+
+In `student/sidebar.php`, replace:
+
+```
+    <!-- <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li> -->
+```
+
+with:
+
+```
+    <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>
+```
+
+- [ ] **Step 3: Verify with real test data, and verify no cross-section leak**
+
+Using student `user_id=161` (class 2, section 16, per this project's existing test data). Create both admin and student disposable session bootstrap scripts and re-derive `$PID` from the DB (shell variables and files from other tasks are not available in this session):
+
+```bash
+cat > _t_admin.php <<'EOF'
+<?php
+session_start();
+$_SESSION['admin_logged_in'] = true;
+$_SESSION['admin_id'] = 'ADM001';
+$_SESSION['admin_name'] = 'System Administrator';
+echo "ok";
+EOF
+cat > _t_student.php <<'EOF'
+<?php
+session_start();
+$_SESSION['student_logged_in'] = true;
+$_SESSION['user_db_id'] = 161;
+$_SESSION['student_id'] = 'STU-65076';
+$_SESSION['student_name'] = 'testv1-cnic2';
+$_SESSION['role'] = 'Student';
+echo "ok";
+EOF
+curl -s -c /tmp/c_admin.txt http://localhost/msst/lms/_t_admin.php
+curl -s -c /tmp/c_student.txt http://localhost/msst/lms/_t_student.php
+
+PID=$(mysql -u root msst_db -N -e "SELECT id FROM timetable_periods WHERE label='Period 1';")
+curl -s -b /tmp/c_admin.txt -X POST \
+  -d "action=save_entry&class_id=2&section_id=16&day_name=Monday&period_id=$PID&subject_id=7&teacher_user_id=184&room=Room 101" \
+  http://localhost/msst/lms/timetable-management.php
+curl -s -b /tmp/c_student.txt http://localhost/msst/lms/student/timetable.php -o /tmp/student_tt.html -w "HTTP %{http_code}\n"
+grep -c "Class-10-CS-Group-English" /tmp/student_tt.html
+```
+
+Expected: HTTP 200, grep count 1.
+
+Now verify the same entry does NOT leak to a student in a different section. Add a second entry for a different class/section+subject/teacher at the same period, and confirm the section-16 student's page still only shows their own entry (not the other one):
+
+```bash
+mysql -u root msst_db -e "SELECT * FROM teacher_class_assignments WHERE class_id != 2 OR section_id != 16 LIMIT 1;"
+# using a different real (class_id, section_id, subject_id, teacher_user_id) row from that query:
+curl -s -b /tmp/c_admin.txt -X POST \
+  -d "action=save_entry&class_id=3&section_id=10&day_name=Monday&period_id=$PID&subject_id=12&teacher_user_id=184&room=Room 202" \
+  http://localhost/msst/lms/timetable-management.php
+curl -s -b /tmp/c_student.txt http://localhost/msst/lms/student/timetable.php -o /tmp/student_tt2.html
+grep -c "Room 202" /tmp/student_tt2.html
+mysql -u root msst_db -e "DELETE FROM timetable_entries WHERE class_id IN (2,3);"
+```
+
+Expected: grep count 0 (the other section's entry never appears on this student's page).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add "student/timetable.php" "student/sidebar.php"
+git commit -m "Replace dummy student timetable with real read-only schedule view"
+```
+
+---
+
+### Task 6: Final end-to-end verification and cleanup
+
+**Files:** none (verification only)
+
+- [ ] **Step 1: Full-cycle manual test**
+
+Run through the complete flow once end-to-end using disposable test data, confirming each step, then clean up. This is a fresh session, so first (re-)create the disposable role-session bootstrap scripts used throughout this project's manual testing and establish cookies for all three roles:
+
+```bash
+cat > _t_admin.php <<'EOF'
+<?php
+session_start();
+$_SESSION['admin_logged_in'] = true;
+$_SESSION['admin_id'] = 'ADM001';
+$_SESSION['admin_name'] = 'System Administrator';
+echo "ok";
+EOF
+cat > _t_teacher.php <<'EOF'
+<?php
+session_start();
+$_SESSION['teacher_logged_in'] = true;
+$_SESSION['teacher_id'] = 'TEA-38371';
+$_SESSION['teacher_name'] = 'test teacher ics 11 class';
+$_SESSION['user_db_id'] = 184;
+echo "ok";
+EOF
+cat > _t_student.php <<'EOF'
+<?php
+session_start();
+$_SESSION['student_logged_in'] = true;
+$_SESSION['user_db_id'] = 161;
+$_SESSION['student_id'] = 'STU-65076';
+$_SESSION['student_name'] = 'testv1-cnic2';
+$_SESSION['role'] = 'Student';
+echo "ok";
+EOF
+curl -s -c /tmp/c_admin.txt http://localhost/msst/lms/_t_admin.php
+curl -s -c /tmp/c_teacher.txt http://localhost/msst/lms/_t_teacher.php
+curl -s -c /tmp/c_student.txt http://localhost/msst/lms/_t_student.php
+```
+
+Then run the full-cycle verification:
+
+```bash
+# 1. Admin sets a period and confirms a real class+section grid cell
+PID=$(mysql -u root msst_db -N -e "SELECT id FROM timetable_periods ORDER BY id DESC LIMIT 1;")
+curl -s -b /tmp/c_admin.txt -X POST \
+  -d "action=save_entry&class_id=2&section_id=16&day_name=Monday&period_id=$PID&subject_id=7&teacher_user_id=184&room=Room 101" \
+  http://localhost/msst/lms/timetable-management.php
+
+# 2. Admin's own grid page reflects it
+curl -s -b /tmp/c_admin.txt "http://localhost/msst/lms/timetable-management.php?class_section=2|16" -o /tmp/final_admin.html
+grep -c "Class-10-CS-Group-English" /tmp/final_admin.html
+
+# 3. Teacher sees it
+curl -s -b /tmp/c_teacher.txt http://localhost/msst/lms/teacher/timetable.php -o /tmp/final_teacher.html
+grep -c "Class-10-CS-Group-English" /tmp/final_teacher.html
+
+# 4. Student sees it
+curl -s -b /tmp/c_student.txt http://localhost/msst/lms/student/timetable.php -o /tmp/final_student.html
+grep -c "Class-10-CS-Group-English" /tmp/final_student.html
+
+# 5. Clean up all test rows and disposable session-bootstrap scripts
+mysql -u root msst_db -e "DELETE FROM timetable_entries WHERE class_id=2 AND section_id=16;"
+rm -f _t_admin.php _t_teacher.php _t_student.php /tmp/c_admin.txt /tmp/c_teacher.txt /tmp/c_student.txt /tmp/*.html
+git status --short
+```
+
+Expected: all three grep counts are 1, final `git status --short` shows no stray test files (only real committed changes from Tasks 1–5, already committed).
+
+- [ ] **Step 2: `php -l` every changed file**
+
+```bash
+php -l timetable-management.php
+php -l "teacher/timetable.php"
+php -l "student/timetable.php"
+php -l sidebar.php
+php -l "teacher/sidebar.php"
+php -l "student/sidebar.php"
+```
+
+Expected: "No syntax errors detected" for every file.
