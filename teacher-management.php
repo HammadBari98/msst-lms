@@ -186,7 +186,7 @@ $teachers = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                                     '<?= htmlspecialchars($teacher['full_name'], ENT_QUOTES) ?>',
                                                     '<?= htmlspecialchars($teacher['assigned_keys'] ?? '', ENT_QUOTES) ?>'
                                                 )">
-                                                    <i class="fas fa-users-cog me-1"></i> Assign Classes
+                                                    <i class="fas fa-users-cog me-1"></i> Assign Class/Section/Subject
                                                 </button>
                                             </td>
                                         </tr>
@@ -211,12 +211,12 @@ $teachers = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <input type="hidden" name="teacher_id" id="assignTeacherId">
                     
                     <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title"><i class="fas fa-user-tie me-2"></i>Assign Classes to <span id="assignTeacherName"></span></h5>
+                        <h5 class="modal-title"><i class="fas fa-user-tie me-2"></i>Assign Class/Section/Subject to <span id="assignTeacherName"></span></h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     
                     <div class="modal-body bg-light">
-                        <p class="text-muted small mb-3">Check the classes you want to assign to this teacher. The teacher will automatically be assigned all active students within these classes for grading and scoring.</p>
+                        <p class="text-muted small mb-3">Check the class / section / subject combinations you want to assign to this teacher. The teacher will automatically be assigned all active students within those specific sections for grading and scoring.</p>
                         
                         <div class="class-checkbox-container">
                             <?php if (empty($class_structure)): ?>
