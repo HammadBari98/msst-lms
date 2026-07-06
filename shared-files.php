@@ -250,7 +250,7 @@ unset($sf);
                                     <td><?= htmlspecialchars($rf['sender_name']) ?></td>
                                     <td><?= htmlspecialchars($rf['file_name']) ?></td>
                                     <td><?= date('d M Y', strtotime($rf['uploaded_at'])) ?></td>
-                                    <td><a href="<?= htmlspecialchars($rf['file_path']) ?>" class="btn btn-sm btn-outline-primary" download><i class="fas fa-download"></i></a></td>
+                                    <td><a href="shared-file-download.php?file_id=<?= (int)$rf['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="fas fa-download"></i></a></td>
                                 </tr>
                                 <?php endforeach; ?>
                                 <?php if (empty($received_files)): ?><tr><td colspan="5" class="text-center text-muted py-4">No files received yet.</td></tr><?php endif; ?>
@@ -274,7 +274,7 @@ unset($sf);
                                     <td><?= htmlspecialchars($sf['file_name']) ?></td>
                                     <td><?= date('d M Y', strtotime($sf['uploaded_at'])) ?></td>
                                     <td>
-                                        <a href="<?= htmlspecialchars($sf['file_path']) ?>" class="btn btn-sm btn-outline-primary" download><i class="fas fa-download"></i></a>
+                                        <a href="shared-file-download.php?file_id=<?= (int)$sf['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="fas fa-download"></i></a>
                                         <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this shared file?');">
                                             <input type="hidden" name="action" value="delete_shared_file">
                                             <input type="hidden" name="file_id" value="<?= (int)$sf['id'] ?>">
