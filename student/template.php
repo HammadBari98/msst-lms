@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['student_logged_in'])) {
-    header('Location: student_login.php');
+    header('Location: login.php');
     exit();
 }
 

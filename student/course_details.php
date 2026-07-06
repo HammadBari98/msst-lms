@@ -3,7 +3,7 @@ session_start();
 // require_once __DIR__ . '/../config/db_config.php'; // No longer needed for static version
 
 if (!isset($_SESSION['student_logged_in'])) {
-    header('Location: student_login.php');
+    header('Location: login.php');
     exit();
 }
 
