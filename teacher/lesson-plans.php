@@ -94,9 +94,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $destination = $upload_dir . $new_file_name;
                 
                 if (move_uploaded_file($file_tmp, $destination)) {
-                    // We only use class_id since sections are not assigned directly to teachers
-                    $class_id = intval($_POST['class_selection']);
-                    $section_id = 0;
+                    [$class_id, $section_id] = array_pad(explode('|', $_POST['class_selection'] ?? ''), 2, null);
+                    $class_id = (int)$class_id;
+                    $section_id = $section_id ? (int)$section_id : null;
 
                     $stmt = $pdo->prepare("INSERT INTO lesson_plans (teacher_id, class_id, section_id, subject_topic, title, period_label, file_name, file_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                     $stmt->execute([
@@ -153,11 +153,12 @@ if (isset($_SESSION['action_msg'])) {
 $my_assigned_classes = [];
 try {
     $stmt_classes = $pdo->prepare("
-        SELECT DISTINCT c.id as class_id, c.class_name 
+        SELECT DISTINCT c.id AS class_id, c.class_name, IFNULL(tca.section_id, 0) AS section_id, sec.section_name
         FROM teacher_class_assignments tca
         JOIN classes c ON tca.class_id = c.id
+        LEFT JOIN sections sec ON tca.section_id = sec.id
         WHERE tca.teacher_user_id = ? OR tca.teacher_user_id = ?
-        ORDER BY c.class_name
+        ORDER BY c.class_name, sec.section_name
     ");
     $stmt_classes->execute([$teacher_user_id, $teacher_details_id]);
     $my_assigned_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
@@ -356,8 +357,8 @@ function getFileIcon($filename) {
                                 <select class="form-select" name="class_selection" required>
                                     <option value="" disabled selected>Choose a class...</option>
                                     <?php foreach ($my_assigned_classes as $cls): ?>
-                                        <option value="<?= htmlspecialchars($cls['class_id']) ?>">
-                                            Class <?= htmlspecialchars($cls['class_name']) ?>
+                                        <option value="<?= $cls['class_id'] ?>|<?= $cls['section_id'] ?>">
+                                            Class <?= htmlspecialchars($cls['class_name']) ?><?= $cls['section_name'] ? ' (' . htmlspecialchars($cls['section_name']) . ')' : '' ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
