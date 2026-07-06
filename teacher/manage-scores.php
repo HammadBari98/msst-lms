@@ -61,9 +61,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // --- CREATE NEW ASSESSMENT ---
     elseif ($_POST['action'] === 'create_assessment') {
         try {
-            $stmt = $pdo->prepare("INSERT INTO assessments (teacher_id, class_id, subject_name, assessment_type, title, total_marks, assessment_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            [$class_id, $section_id] = array_pad(explode('|', $_POST['class_id'] ?? ''), 2, null);
+            $stmt = $pdo->prepare("INSERT INTO assessments (teacher_id, class_id, section_id, subject_name, assessment_type, title, total_marks, assessment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
-                $teacher_id, $_POST['class_id'], $_POST['subject_name'],
+                $teacher_id, (int)$class_id, $section_id ? (int)$section_id : null, $_POST['subject_name'],
                 $_POST['assessment_type'], $_POST['title'], $_POST['total_marks'], $_POST['assessment_date']
             ]);
             $msg = '<div class="alert alert-success">Assessment created successfully!</div>';
@@ -73,9 +74,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // --- UPDATE ASSESSMENT DETAILS ---
     elseif ($_POST['action'] === 'update_assessment') {
         try {
-            $stmt = $pdo->prepare("UPDATE assessments SET class_id = ?, subject_name = ?, assessment_type = ?, title = ?, total_marks = ?, assessment_date = ? WHERE id = ? AND teacher_id = ?");
+            [$class_id, $section_id] = array_pad(explode('|', $_POST['class_id'] ?? ''), 2, null);
+            $stmt = $pdo->prepare("UPDATE assessments SET class_id = ?, section_id = ?, subject_name = ?, assessment_type = ?, title = ?, total_marks = ?, assessment_date = ? WHERE id = ? AND teacher_id = ?");
             $stmt->execute([
-                $_POST['class_id'], $_POST['subject_name'], $_POST['assessment_type'],
+                (int)$class_id, $section_id ? (int)$section_id : null, $_POST['subject_name'], $_POST['assessment_type'],
                 $_POST['title'], $_POST['total_marks'], $_POST['assessment_date'],
                 $_POST['assessment_id'], $teacher_id
             ]);
@@ -123,15 +125,22 @@ $stmt_types->execute([$teacher_id]);
 $assessment_types = $stmt_types->fetchAll(PDO::FETCH_ASSOC);
 
 // Get Teacher's Assigned Classes
-$stmt_classes = $pdo->prepare("SELECT c.id, c.class_name FROM classes c JOIN teacher_class_assignments tca ON c.id = tca.class_id WHERE tca.teacher_user_id = ?");
+$stmt_classes = $pdo->prepare("
+    SELECT DISTINCT c.id AS class_id, c.class_name, IFNULL(tca.section_id, 0) AS section_id, sec.section_name
+    FROM teacher_class_assignments tca
+    JOIN classes c ON tca.class_id = c.id
+    LEFT JOIN sections sec ON tca.section_id = sec.id
+    WHERE tca.teacher_user_id = ?
+    ORDER BY c.class_name, sec.section_name
+");
 $stmt_classes->execute([$teacher_id]);
 $assigned_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 
 // Get Teacher's Assessments
 $stmt_assessments = $pdo->prepare("
-    SELECT a.*, c.class_name, 
+    SELECT a.*, c.class_name,
            (SELECT COUNT(*) FROM student_scores WHERE assessment_id = a.id) as graded_count,
-           (SELECT COUNT(*) FROM student_details sd JOIN users u ON sd.user_id = u.id WHERE sd.class_id = a.class_id AND u.status = 'Active') as total_students
+           (SELECT COUNT(*) FROM student_details sd JOIN users u ON sd.user_id = u.id WHERE sd.class_id = a.class_id AND IFNULL(sd.section_id,0) = IFNULL(a.section_id,0) AND u.status = 'Active') as total_students
     FROM assessments a
     JOIN classes c ON a.class_id = c.id
     WHERE a.teacher_id = ?
@@ -220,7 +229,7 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                                             <button class="btn btn-sm btn-success me-1" onclick="gradeAssessment(<?= $asm['id'] ?>, <?= $asm['class_id'] ?>, '<?= htmlspecialchars($asm['title'], ENT_QUOTES) ?>', <?= $asm['total_marks'] ?>)">
                                                 <i class="fas fa-edit"></i> Grade
                                             </button>
-                                            <button type="button" class="btn btn-sm btn-primary me-1 mb-1 shadow-sm" onclick="openEditModal(<?= $asm['id'] ?>, <?= $asm['class_id'] ?>, '<?= htmlspecialchars($asm['subject_name'], ENT_QUOTES) ?>', '<?= htmlspecialchars($asm['assessment_type'], ENT_QUOTES) ?>', '<?= htmlspecialchars($asm['title'], ENT_QUOTES) ?>', <?= $asm['total_marks'] ?>, '<?= $asm['assessment_date'] ?>')" title="Edit Assessment Info">
+                                            <button type="button" class="btn btn-sm btn-primary me-1 mb-1 shadow-sm" onclick="openEditModal(<?= $asm['id'] ?>, '<?= $asm['class_id'] ?>|<?= (int)($asm['section_id'] ?? 0) ?>', '<?= htmlspecialchars($asm['subject_name'], ENT_QUOTES) ?>', '<?= htmlspecialchars($asm['assessment_type'], ENT_QUOTES) ?>', '<?= htmlspecialchars($asm['title'], ENT_QUOTES) ?>', <?= $asm['total_marks'] ?>, '<?= $asm['assessment_date'] ?>')" title="Edit Assessment Info">
                                                 <i class="fas fa-pen"></i> Edit
                                             </button>
                                             <form method="post" class="d-inline" onsubmit="return confirm('Delete this assessment and ALL associated scores?');">
@@ -256,7 +265,7 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                             <select name="class_id" class="form-select" required>
                                 <option value="" disabled selected>Choose your assigned class...</option>
                                 <?php foreach($assigned_classes as $cls): ?>
-                                    <option value="<?= $cls['id'] ?>">Class <?= htmlspecialchars($cls['class_name']) ?></option>
+                                    <option value="<?= $cls['class_id'] ?>|<?= $cls['section_id'] ?>">Class <?= htmlspecialchars($cls['class_name']) ?><?= $cls['section_name'] ? ' (' . htmlspecialchars($cls['section_name']) . ')' : '' ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -359,7 +368,7 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
                             <select name="class_id" id="edit_class_id" class="form-select" required>
                                 <option value="" disabled>Choose your assigned class...</option>
                                 <?php foreach($assigned_classes as $cls): ?>
-                                    <option value="<?= $cls['id'] ?>">Class <?= htmlspecialchars($cls['class_name']) ?></option>
+                                    <option value="<?= $cls['class_id'] ?>|<?= $cls['section_id'] ?>">Class <?= htmlspecialchars($cls['class_name']) ?><?= $cls['section_name'] ? ' (' . htmlspecialchars($cls['section_name']) . ')' : '' ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -526,7 +535,7 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
             $.ajax({
                 url: '../ajax/get_subjects.php',
                 type: 'GET',
-                data: { class_id: $(this).val() },
+                data: { class_id: $(this).val().split('|')[0] },
                 dataType: 'json',
                 success: function(subjects) {
                     var options = '<option value="">Choose Subject...</option>';
@@ -563,7 +572,7 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
             $.ajax({
                 url: '../ajax/get_subjects.php',
                 type: 'GET',
-                data: { class_id: classId },
+                data: { class_id: classId.split('|')[0] },
                 dataType: 'json',
                 success: function(subjects) {
                     var options = '<option value="">Choose Subject...</option>';
@@ -599,7 +608,7 @@ $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
             $.ajax({
                 url: '../ajax/get_subjects.php',
                 type: 'GET',
-                data: { class_id: $(this).val() },
+                data: { class_id: $(this).val().split('|')[0] },
                 dataType: 'json',
                 success: function(subjects) {
                     var options = '<option value="">Choose Subject...</option>';

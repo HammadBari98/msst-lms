@@ -2,25 +2,32 @@
 session_start();
 require_once '../config/db_config.php';
 
-if (!isset($_SESSION['teacher_logged_in']) || !isset($_POST['class_id']) || !isset($_POST['assessment_id'])) {
+if (!isset($_SESSION['teacher_logged_in']) || !isset($_POST['assessment_id'])) {
     exit('Unauthorized');
 }
 
-$class_id = $_POST['class_id'];
 $assessment_id = $_POST['assessment_id'];
 
-// Get all students in this class and their existing scores (if any)
+$stmt_asm = $pdo->prepare("SELECT class_id, section_id FROM assessments WHERE id = ?");
+$stmt_asm->execute([$assessment_id]);
+$assessment = $stmt_asm->fetch(PDO::FETCH_ASSOC);
+
+if (!$assessment) {
+    echo '<tr><td colspan="3" class="text-center">Assessment not found.</td></tr>';
+    exit;
+}
+
 $stmt = $pdo->prepare("
     SELECT u.id as student_id, u.full_name, u.user_id_string, ss.marks_obtained, ss.remarks
     FROM users u
     JOIN student_details sd ON u.id = sd.user_id
     LEFT JOIN student_scores ss ON u.id = ss.student_id AND ss.assessment_id = ?
-    WHERE u.role_id = (SELECT id FROM roles WHERE role_name = 'Student' LIMIT 1) 
-    AND u.status = 'Active' 
-    AND sd.class_id = ?
+    WHERE u.role_id = (SELECT id FROM roles WHERE role_name = 'Student' LIMIT 1)
+    AND u.status = 'Active'
+    AND sd.class_id = ? AND IFNULL(sd.section_id,0) = IFNULL(?,0)
     ORDER BY u.full_name ASC
 ");
-$stmt->execute([$assessment_id, $class_id]);
+$stmt->execute([$assessment_id, $assessment['class_id'], $assessment['section_id']]);
 $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 if (empty($students)) {
