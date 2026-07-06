@@ -206,7 +206,7 @@
     <li><a href="fee-detail.php"><i class="fas fa-receipt"></i> <span>Fee Detail</span></a></li>
     <li><a href="performance.php"><i class="fas fa-chart-line"></i> <span>Performance</span></a></li>
     <li><a href="notice.php"><i class="fas fa-bullhorn"></i> <span>Notices</span></a></li>
-    <!-- <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li> -->
+    <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>
     <!-- <li><a href="support.php"><i class="fas fa-life-ring"></i> <span>Support</span></a></li> -->
   
     <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>

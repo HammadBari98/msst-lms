@@ -1,162 +1,113 @@
 <?php
 session_start();
-// require_once __DIR__ . '/../config/db_config.php'; // Not needed for static version
+require_once __DIR__ . '/../config/db_config.php';
 
 if (!isset($_SESSION['student_logged_in'])) {
     header('Location: login.php');
     exit();
 }
 
-$student_id = $_SESSION['student_id'];
-$student_name = $_SESSION['student_name'];
+$student_name = $_SESSION['student_name'] ?? 'Student';
 
-// --- START: DUMMY DATA FOR WEEKLY CLASS SCHEDULE ---
-// The data is grouped by the day of the week.
-$schedule = [
-    'Monday' => [
-        ['start_time' => '09:00', 'end_time' => '10:00', 'course_name' => 'Calculus II', 'teacher_name' => 'Mr. Farhan'],
-        ['start_time' => '10:00', 'end_time' => '11:00', 'course_name' => 'English Literature', 'teacher_name' => 'Ms. Ayesha'],
-        ['start_time' => '11:00', 'end_time' => '12:00', 'course_name' => 'Introduction to Physics', 'teacher_name' => 'Mr. Ahmed Khan'],
-        ['start_time' => '12:00', 'end_time' => '13:00', 'course_name' => 'Break', 'teacher_name' => ''],
-        ['start_time' => '13:00', 'end_time' => '14:00', 'course_name' => 'Islamic Studies', 'teacher_name' => 'Mr. Qari'],
-    ],
-    'Tuesday' => [
-        ['start_time' => '09:00', 'end_time' => '10:00', 'course_name' => 'Introduction to Physics', 'teacher_name' => 'Mr. Ahmed Khan'],
-        ['start_time' => '10:00', 'end_time' => '11:00', 'course_name' => 'Calculus II', 'teacher_name' => 'Mr. Farhan'],
-        ['start_time' => '11:00', 'end_time' => '12:00', 'course_name' => 'Pakistan Studies', 'teacher_name' => 'Mr. Ali'],
-    ],
-    'Wednesday' => [
-        ['start_time' => '09:00', 'end_time' => '10:00', 'course_name' => 'English Literature', 'teacher_name' => 'Ms. Ayesha'],
-        ['start_time' => '10:00', 'end_time' => '11:00', 'course_name' => 'Calculus II', 'teacher_name' => 'Mr. Farhan'],
-        ['start_time' => '11:00', 'end_time' => '12:00', 'course_name' => 'Introduction to Physics (Lab)', 'teacher_name' => 'Mr. Ahmed Khan'],
-    ],
-    'Thursday' => [
-        ['start_time' => '09:00', 'end_time' => '10:00', 'course_name' => 'Introduction to Physics', 'teacher_name' => 'Mr. Ahmed Khan'],
-        ['start_time' => '10:00', 'end_time' => '11:00', 'course_name' => 'English Literature', 'teacher_name' => 'Ms. Ayesha'],
-        ['start_time' => '11:00', 'end_time' => '12:00', 'course_name' => 'Pakistan Studies', 'teacher_name' => 'Mr. Ali'],
-    ],
-    'Friday' => [
-        ['start_time' => '09:00', 'end_time' => '10:00', 'course_name' => 'Calculus II', 'teacher_name' => 'Mr. Farhan'],
-        ['start_time' => '10:00', 'end_time' => '11:00', 'course_name' => 'Islamic Studies', 'teacher_name' => 'Mr. Qari'],
-    ],
-    'Saturday' => [], // Example of a day with no classes
-];
-
-// Get the current day of the week to make its tab active
-$current_day = date('l'); // e.g., "Tuesday"
-if (!array_key_exists($current_day, $schedule)) {
-    $current_day = 'Monday'; // Default to Monday if it's Sunday or a day not in the schedule
+$current_user_db_id = 0;
+if (!empty($_SESSION['student_id'])) {
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE user_id_string = ? LIMIT 1");
+    $stmt->execute([$_SESSION['student_id']]);
+    $current_user_db_id = $stmt->fetchColumn();
+}
+if (!$current_user_db_id && isset($_SESSION['user_db_id'])) {
+    $current_user_db_id = (int)$_SESSION['user_db_id'];
 }
 
-// --- END OF DUMMY DATA ---
+$student_class_id = 0;
+$student_section_id = 0;
+if ($current_user_db_id > 0) {
+    $stmt_class = $pdo->prepare("SELECT class_id, section_id FROM student_details WHERE user_id = ? LIMIT 1");
+    $stmt_class->execute([$current_user_db_id]);
+    $row = $stmt_class->fetch(PDO::FETCH_ASSOC);
+    $student_class_id = $row['class_id'] ?? 0;
+    $student_section_id = $row['section_id'] ?? 0;
+}
+
+$periods = $pdo->query("SELECT * FROM timetable_periods ORDER BY period_number")->fetchAll(PDO::FETCH_ASSOC);
+$active_days = $pdo->query("SELECT * FROM school_days WHERE is_active = 1 ORDER BY day_order")->fetchAll(PDO::FETCH_ASSOC);
+
+$schedule = [];
+if ($student_class_id) {
+    $stmt = $pdo->prepare("
+        SELECT te.day_name, te.period_id, te.room, s.subject_name, u.full_name AS teacher_name
+        FROM timetable_entries te
+        JOIN subjects s ON s.id = te.subject_id
+        JOIN users u ON u.id = te.teacher_user_id
+        WHERE te.class_id = ? AND IFNULL(te.section_id,0) = IFNULL(?,0)
+    ");
+    $stmt->execute([$student_class_id, $student_section_id]);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $schedule[$row['day_name'] . '|' . $row['period_id']] = $row;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Class Schedule | <?= htmlspecialchars($student_name) ?></title>
+    <title>My Timetable | <?= htmlspecialchars($student_name) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root { --primary: #4e73df; --light-bg: #f8f9fc; }
-        body { font-family: 'Segoe UI', sans-serif; background-color: var(--light-bg); }
-        .nav-tabs .nav-link { color: #6e707e; }
-        .nav-tabs .nav-link.active { color: var(--primary); font-weight: bold; border-color: #dee2e6 #dee2e6 #fff; }
-        .schedule-item { border-left: 4px solid var(--primary); }
-        .schedule-item .time { font-weight: bold; }
-        .schedule-item .course { font-size: 1.1rem; }
-    </style>
 </head>
 <body>
-    <?php include 'sidebar.php'; ?>
-    <div id="main-content">
-        <?php include 'header.php'; ?>
-        <div class="content-wrapper p-4">
-            <div class="container-fluid">
-                <h1 class="h3 mb-4">Weekly Class Schedule</h1>
 
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white border-0">
-                        <ul class="nav nav-tabs card-header-tabs" id="scheduleTab" role="tablist">
-                            <?php foreach ($schedule as $day => $classes): ?>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link <?= ($day == $current_day) ? 'active' : '' ?>" 
-                                            id="<?= strtolower($day) ?>-tab" 
-                                            data-bs-toggle="tab" 
-                                            data-bs-target="#<?= strtolower($day) ?>-pane" 
-                                            type="button"><?= $day ?></button>
-                                </li>
+<?php include 'sidebar.php' ?>
+
+<div id="main-content">
+    <?php include 'header.php' ?>
+
+    <div class="content-wrapper p-4">
+        <div class="container-fluid">
+            <h1 class="h3 mb-4">My Timetable</h1>
+
+            <?php if (empty($periods)): ?>
+                <div class="alert alert-info">The timetable has not been set up yet. Please check back later.</div>
+            <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Period</th>
+                            <?php foreach ($active_days as $d): ?>
+                                <th><?= htmlspecialchars($d['day_name']) ?></th>
                             <?php endforeach; ?>
-                        </ul>
-                    </div>
-                    <div class="card-body">
-                        <div class="tab-content" id="scheduleTabContent">
-                            <?php foreach ($schedule as $day => $classes): ?>
-                                <div class="tab-pane fade <?= ($day == $current_day) ? 'show active' : '' ?>" 
-                                     id="<?= strtolower($day) ?>-pane" 
-                                     role="tabpanel">
-                                     
-                                    <?php if (empty($classes)): ?>
-                                        <div class="text-center p-5">
-                                            <i class="fas fa-couch fa-3x text-muted"></i>
-                                            <p class="mt-3 text-muted">No classes scheduled for today.</p>
-                                        </div>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($periods as $p): ?>
+                        <tr>
+                            <td class="fw-bold"><?= htmlspecialchars($p['label']) ?><br><small class="text-muted"><?= substr($p['start_time'],0,5) ?>-<?= substr($p['end_time'],0,5) ?></small></td>
+                            <?php if ($p['is_break']): ?>
+                                <td colspan="<?= count($active_days) ?>" class="bg-light fw-bold text-uppercase text-secondary"><?= htmlspecialchars($p['label']) ?></td>
+                            <?php else: foreach ($active_days as $d):
+                                $entry = $schedule[$d['day_name'] . '|' . $p['id']] ?? null; ?>
+                                <td>
+                                    <?php if ($entry): ?>
+                                        <div class="fw-bold"><?= htmlspecialchars($entry['subject_name']) ?></div>
+                                        <div class="small text-muted"><?= htmlspecialchars($entry['teacher_name']) ?></div>
+                                        <?php if ($entry['room']): ?><div class="small text-muted"><?= htmlspecialchars($entry['room']) ?></div><?php endif; ?>
                                     <?php else: ?>
-                                        <ul class="list-group list-group-flush">
-                                            <?php foreach ($classes as $class_item): ?>
-                                                <?php if ($class_item['course_name'] == 'Break'): ?>
-                                                    <li class="list-group-item text-center bg-light">
-                                                        <strong class="text-muted"><i class="fas fa-mug-hot me-2"></i><?= htmlspecialchars($class_item['course_name']) ?> (<?= date('g:i A', strtotime($class_item['start_time'])) ?> - <?= date('g:i A', strtotime($class_item['end_time'])) ?>)</strong>
-                                                    </li>
-                                                <?php else: ?>
-                                                    <li class="list-group-item p-3 schedule-item mb-2">
-                                                        <div class="d-flex w-100 justify-content-between">
-                                                            <h5 class="mb-1 course"><?= htmlspecialchars($class_item['course_name']) ?></h5>
-                                                            <span class="time text-primary"><?= date('g:i A', strtotime($class_item['start_time'])) ?> - <?= date('g:i A', strtotime($class_item['end_time'])) ?></span>
-                                                        </div>
-                                                        <p class="mb-1 text-muted">
-                                                            <i class="fas fa-user-tie fa-fw me-2"></i><?= htmlspecialchars($class_item['teacher_name']) ?>
-                                                        </p>
-                                                    </li>
-                                                <?php endif; ?>
-                                            <?php endforeach; ?>
-                                        </ul>
+                                        <span class="text-muted">&mdash;</span>
                                     <?php endif; ?>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                </div>
-
+                                </td>
+                            <?php endforeach; endif; ?>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
+            <?php endif; ?>
         </div>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-    // The final, correct sidebar toggle script
-    const sidebar = document.getElementById('sidebar');
-    const mainContent = document.getElementById('main-content');
-    const toggleBtn = document.getElementById('sidebarToggle');
-    if (toggleBtn && sidebar && mainContent) {
-        toggleBtn.addEventListener('click', (event) => {
-            event.stopPropagation();
-            if (window.innerWidth <= 768) {
-                sidebar.classList.toggle('show');
-            } else {
-                sidebar.classList.toggle('collapsed');
-                mainContent.classList.toggle('collapsed');
-            }
-        });
-    }
-    document.addEventListener('click', function (event) {
-        if (sidebar && toggleBtn && !sidebar.contains(event.target) && !toggleBtn.contains(event.target)) {
-            if (sidebar.classList.contains('show')) {
-                sidebar.classList.remove('show');
-            }
-        }
-    });
-    </script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
