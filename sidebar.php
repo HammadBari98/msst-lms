@@ -22,6 +22,7 @@
         <li><a href="attendance-report.php"><i class="fas fa-user-check fa-fw me-2"></i> <span>Attendance Report</span></a></li>
         <li><a href="content-management.php"><i class="fas fa-folder-open fa-fw me-2"></i> <span>Content Management</span></a></li>
         <li><a href="notice-board.php"><i class="fas fa-bullhorn fa-fw me-2"></i> <span>Notice Board</span></a></li>
+        <li><a href="shared-files.php"><i class="fas fa-share-alt fa-fw me-2"></i> <span>Shared Files</span></a></li>
         <li><a href="leads.php"><i class="fas fa-user"></i> <span>College Leads</span></a></li>
         <li><a href="school_leads.php"><i class="fas fa-school"></i> <span>School Leads</span></a></li>
         <li><a href="it_course_leads.php"><i class="fas fa-school"></i> <span>Register Leads</span></a></li>
