@@ -30,6 +30,11 @@ try {
     $pdo->exec("ALTER TABLE student_details ADD COLUMN IF NOT EXISTS one_time_fees_cleared TINYINT(1) DEFAULT 0");
 } catch (PDOException $e) { /* Column already exists */ }
 
+// One-time migration: retire the old fixed-price Lunch presets in favor of a free-input Lunch Fee amount
+try {
+    $pdo->exec("UPDATE fee_components SET is_active = 0 WHERE TRIM(name) = 'Lunch' AND is_active = 1");
+} catch (PDOException $e) { /* Already migrated */ }
+
 // --- Database Functions ---
 function getAllStudents($pdo) {
     try {
