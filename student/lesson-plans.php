@@ -33,27 +33,33 @@ if (!$current_user_db_id && isset($_SESSION['user_id']) && is_numeric($_SESSION[
 // 2. FETCH STUDENT'S CLASS & LESSON PLANS
 // =======================================================
 $student_class_id = 0;
+$student_section_id = 0;
 $class_plans = [];
 $error_message = null;
 
 if ($current_user_db_id > 0) {
     try {
-        // Find which class this student belongs to
-        $stmt_class = $pdo->prepare("SELECT class_id FROM student_details WHERE user_id = ? LIMIT 1");
+        // Find which class and section this student belongs to
+        $stmt_class = $pdo->prepare("SELECT class_id, section_id FROM student_details WHERE user_id = ? LIMIT 1");
         $stmt_class->execute([$current_user_db_id]);
-        $student_class_id = $stmt_class->fetchColumn();
+        $student_details = $stmt_class->fetch(PDO::FETCH_ASSOC);
+
+        if ($student_details) {
+            $student_class_id = $student_details['class_id'] ?? 0;
+            $student_section_id = $student_details['section_id'] ?? 0;
+        }
 
         if ($student_class_id) {
-            // Fetch ONLY the lesson plans assigned to this specific class
+            // Fetch ONLY the lesson plans assigned to this specific class and section
             // Join with users table to dynamically get the Teacher's real name
             $stmt_plans = $pdo->prepare("
-                SELECT lp.*, u.full_name as teacher_name 
+                SELECT lp.*, u.full_name as teacher_name
                 FROM lesson_plans lp
                 LEFT JOIN users u ON lp.teacher_id = u.id
-                WHERE lp.class_id = ?
+                WHERE lp.class_id = ? AND IFNULL(lp.section_id, 0) = IFNULL(?, 0)
                 ORDER BY lp.created_at DESC
             ");
-            $stmt_plans->execute([$student_class_id]);
+            $stmt_plans->execute([$student_class_id, $student_section_id]);
             $class_plans = $stmt_plans->fetchAll(PDO::FETCH_ASSOC);
         }
     } catch (PDOException $e) {
