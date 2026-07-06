@@ -50,46 +50,49 @@ if ($teacher_user_id > 0) {
 // 3. DYNAMIC DATA FETCHING (Using Real Assignment Tables)
 // =======================================================
 try {
-    // A. Fetch Detailed List of Assigned Classes
+    // A. Fetch Detailed List of Assigned (Class, Section) Pairs
     $stmt_my_classes_list = $pdo->prepare("
-        SELECT DISTINCT c.id as class_id, c.class_name 
-        FROM teacher_class_assignments tca
+        SELECT DISTINCT c.id as class_id, c.class_name, IFNULL(tca.section_id,0) as section_id, sec.section_name
+        FROM (SELECT DISTINCT class_id, section_id FROM teacher_class_assignments WHERE teacher_user_id = ? OR teacher_user_id = ?) tca
         JOIN classes c ON tca.class_id = c.id
-        WHERE tca.teacher_user_id = ? OR tca.teacher_user_id = ?
-        ORDER BY c.class_name
+        LEFT JOIN sections sec ON tca.section_id = sec.id
+        ORDER BY c.class_name, sec.section_name
     ");
     $stmt_my_classes_list->execute([$teacher_user_id, $teacher_details_id]);
     $my_assigned_classes = $stmt_my_classes_list->fetchAll(PDO::FETCH_ASSOC);
     $total_my_classes = count($my_assigned_classes);
 
-    // B. Total Active Students in THIS Teacher's Classes
+    // B. Total Active Students in THIS Teacher's assigned sections
     $stmt_students = $pdo->prepare("
-        SELECT COUNT(DISTINCT sd.user_id) 
+        SELECT COUNT(DISTINCT sd.user_id)
         FROM student_details sd
-        JOIN teacher_class_assignments tca ON sd.class_id = tca.class_id
+        JOIN (SELECT DISTINCT class_id, section_id FROM teacher_class_assignments WHERE teacher_user_id = ? OR teacher_user_id = ?) tca
+          ON sd.class_id = tca.class_id AND IFNULL(sd.section_id,0) = IFNULL(tca.section_id,0)
         JOIN users u ON sd.user_id = u.id
-        WHERE (tca.teacher_user_id = ? OR tca.teacher_user_id = ?) AND u.status = 'Active'
+        WHERE u.status = 'Active'
     ");
     $stmt_students->execute([$teacher_user_id, $teacher_details_id]);
     $total_my_students = $stmt_students->fetchColumn() ?: 0;
 
-    // C. Upcoming Assessments Created for THIS Teacher's Classes
+    // C. Upcoming Assessments Created for THIS Teacher's assigned sections
     $stmt_assess_count = $pdo->prepare("
-        SELECT COUNT(DISTINCT a.id) 
+        SELECT COUNT(DISTINCT a.id)
         FROM assessments a
-        JOIN teacher_class_assignments tca ON a.class_id = tca.class_id
-        WHERE (tca.teacher_user_id = ? OR tca.teacher_user_id = ?) AND a.assessment_date >= CURRENT_DATE
+        JOIN (SELECT DISTINCT class_id, section_id FROM teacher_class_assignments WHERE teacher_user_id = ? OR teacher_user_id = ?) tca
+          ON a.class_id = tca.class_id AND IFNULL(a.section_id,0) = IFNULL(tca.section_id,0)
+        WHERE a.assessment_date >= CURRENT_DATE
     ");
     $stmt_assess_count->execute([$teacher_user_id, $teacher_details_id]);
     $pending_assessments_count = $stmt_assess_count->fetchColumn() ?: 0;
 
-    // D. Fetch Upcoming Assessments Timeline (Only for their classes)
+    // D. Fetch Upcoming Assessments Timeline (Only for their assigned sections)
     $stmt_assessments = $pdo->prepare("
-        SELECT DISTINCT a.*, c.class_name 
+        SELECT DISTINCT a.*, c.class_name
         FROM assessments a
-        JOIN teacher_class_assignments tca ON a.class_id = tca.class_id
+        JOIN (SELECT DISTINCT class_id, section_id FROM teacher_class_assignments WHERE teacher_user_id = ? OR teacher_user_id = ?) tca
+          ON a.class_id = tca.class_id AND IFNULL(a.section_id,0) = IFNULL(tca.section_id,0)
         LEFT JOIN classes c ON a.class_id = c.id
-        WHERE (tca.teacher_user_id = ? OR tca.teacher_user_id = ?) AND a.assessment_date >= CURRENT_DATE 
+        WHERE a.assessment_date >= CURRENT_DATE
         ORDER BY a.assessment_date ASC LIMIT 5
     ");
     $stmt_assessments->execute([$teacher_user_id, $teacher_details_id]);
