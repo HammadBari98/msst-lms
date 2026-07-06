@@ -237,6 +237,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $installments = isset($_POST['installments']) ? max(1, intval($_POST['installments'])) : 1;
                 $installment_days = isset($_POST['installment_days']) ? max(1, intval($_POST['installment_days'])) : 15;
                 $installment_charge = isset($_POST['installment_charge']) ? floatval($_POST['installment_charge']) : 0;
+                $enable_lunch_fee = isset($_POST['enable_lunch_fee']);
+                $lunch_fee_amount = isset($_POST['lunch_fee_amount']) ? floatval($_POST['lunch_fee_amount']) : 0;
 
                 $total_fee = 0;
                 $component_data = [];
@@ -300,10 +302,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $lf_comp_id = $pdo->lastInsertId();
                     }
                     $component_data[] = ['id' => $lf_comp_id, 'name' => 'Previous Arrears & Late Fee (' . $true_overdue_count . ' month(s))', 'amount' => $total_arrears, 'type' => 'recurring'];
-                    
+
                     $pdo->prepare("UPDATE fee_slips SET status = 'Overdue' WHERE student_id = ? AND status = 'Pending' AND due_date < CURRENT_DATE")->execute([$student_id]);
                 }
-                
+
+                if ($enable_lunch_fee && $lunch_fee_amount > 0) {
+                    $stmt_lunch = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Lunch Fee' LIMIT 1");
+                    $stmt_lunch->execute();
+                    $lunch_comp_id = $stmt_lunch->fetchColumn();
+                    if (!$lunch_comp_id) {
+                        $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Lunch Fee', 0, 'recurring', 'Custom per-student lunch charge, entered at slip generation time', 1, 1)");
+                        $lunch_comp_id = $pdo->lastInsertId();
+                    }
+                    $total_fee += $lunch_fee_amount;
+                    $component_data[] = ['id' => $lunch_comp_id, 'name' => 'Lunch Fee', 'amount' => $lunch_fee_amount, 'type' => 'recurring'];
+                }
+
                 $installment_amount = $total_fee / $installments;
                 $base_slip_no = generateSlipNumber($selected_student['class_id'], $selected_student['id'], $target_month);
                 
@@ -828,8 +842,9 @@ $fee_categories_json = json_encode(array_values($fee_categories));
                                     
                                     <div class="col-md-6 mt-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="enableMultiMonth" name="enable_multi_month"><label class="form-check-label fw-bold small text-success" for="enableMultiMonth">Multi-Month Generation</label></div></div>
                                     <div class="col-md-6 mt-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="enableSingleInstallments"><label class="form-check-label fw-bold small text-primary" for="enableSingleInstallments">Enable Installments</label></div></div>
+                                    <div class="col-md-6 mt-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="enableSingleLunchFee" name="enable_lunch_fee"><label class="form-check-label fw-bold small text-warning" for="enableSingleLunchFee">Enable Lunch Fee</label></div></div>
                                 </div>
-                                
+
                                 <div class="row g-2 mb-3 px-3 multi-month-fields" style="display: none;">
                                     <div class="col-md-12"><label class="form-label small fw-bold text-success">Number of Months to Combine</label><input type="number" class="form-control border-success bg-success bg-opacity-10 fw-bold" name="multi_months" id="multiMonthsInput" value="1" min="1" max="12"></div>
                                     <div class="col-md-12"><small class="text-muted"><i class="fas fa-info-circle me-1"></i>This combines the fees for all selected months into a <strong>SINGLE</strong> fee voucher.</small></div>
@@ -838,6 +853,9 @@ $fee_categories_json = json_encode(array_values($fee_categories));
                                     <div class="col-md-4"><label class="form-label small fw-bold text-primary">No. of Installments</label><input type="number" class="form-control border-primary" name="installments" id="singleInstallments" value="1" min="1" max="4"></div>
                                     <div class="col-md-4"><label class="form-label small fw-bold text-primary">Days Between</label><input type="number" class="form-control border-primary" name="installment_days" value="15" min="1"></div>
                                     <div class="col-md-4"><label class="form-label small fw-bold text-primary">Extra Charge/Slip</label><div class="input-group"><span class="input-group-text border-primary bg-primary text-white">PKR</span><input type="number" class="form-control border-primary" name="installment_charge" value="0" min="0" step="0.01"></div></div>
+                                </div>
+                                <div class="row g-2 mb-3 px-3 lunch-fee-fields-single" style="display: none;">
+                                    <div class="col-md-12"><label class="form-label small fw-bold text-warning">Lunch Amount</label><div class="input-group"><span class="input-group-text border-warning bg-warning bg-opacity-25">PKR</span><input type="number" class="form-control border-warning" name="lunch_fee_amount" id="singleLunchFeeAmount" value="0" min="0" step="0.01"></div></div>
                                 </div>
                                 <div class="card border-0 shadow-sm rounded-3 mb-4">
                                     <div class="card-header bg-white border-bottom py-3"><h6 class="fw-bold mb-0 text-dark">Fee Breakdown</h6></div>
@@ -1164,6 +1182,9 @@ function calculateFeeForStudent(student) {
         const inst = parseInt($('#singleInstallments').val()) || 1;
         const charge = parseFloat($('input[name="installment_charge"]').val()) || 0;
         $('.optional-fee-cb:checked').each(function() { currentTotal += parseFloat($(this).data('amount')); });
+        if ($('#enableSingleLunchFee').is(':checked')) {
+            currentTotal += parseFloat($('#singleLunchFeeAmount').val()) || 0;
+        }
         let finalAmount = (currentTotal / inst);
         let extra = '';
         if (inst > 1) { finalAmount += charge; extra = `<div class="mb-2 p-2 border-bottom bg-danger bg-opacity-10 text-danger rounded d-flex justify-content-between"><span>Installment Fee</span><strong>+ PKR ${charge.toFixed(2)}</strong></div>`; }
@@ -1506,10 +1527,13 @@ $('#enableMultiMonth').on('change', function() {
 $('#enableSingleInstallments').on('change', function() {
     if ($(this).is(':checked')) { $('.installment-fields-single').slideDown(); $('#singleInstallments').val(1); const c = activeComponents.find(x => x.name.toLowerCase().includes('installment charge')); if(c) $('input[name="installment_charge"]').val(parseFloat(c.amount).toFixed(2)); } else { $('.installment-fields-single').slideUp(); $('#singleInstallments').val(1); }
 });
+$('#enableSingleLunchFee').on('change', function() {
+    if ($(this).is(':checked')) { $('.lunch-fee-fields-single').slideDown(); } else { $('.lunch-fee-fields-single').slideUp(); $('#singleLunchFeeAmount').val(0); }
+});
 $('#enableClassInstallments').on('change', function() {
     if ($(this).is(':checked')) { $('.installment-fields-class').slideDown(); $('#classInstallments').val(1); const c = activeComponents.find(x => x.name.toLowerCase().includes('installment charge')); if(c) $('#generateClassSlipsModal input[name="installment_charge"]').val(parseFloat(c.amount).toFixed(2)); } else { $('.installment-fields-class').slideUp(); $('#classInstallments').val(1); }
 });
-$('#singleInstallments, input[name="installment_charge"], #multiMonthsInput, #enableMultiMonth').on('change keyup', () => { if (selectedStudent) calculateFeeForStudent(selectedStudent); });
+$('#singleInstallments, input[name="installment_charge"], #multiMonthsInput, #enableMultiMonth, #enableSingleLunchFee, #singleLunchFeeAmount').on('change keyup', () => { if (selectedStudent) calculateFeeForStudent(selectedStudent); });
 
 function editDatesModal(slipNo, studentName, issueDate, dueDate) {
     document.getElementById('editDatesSlipNo').value = slipNo;
