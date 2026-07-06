@@ -16,12 +16,20 @@ $stmt_get_id->execute([$teacher_session_id, $teacher_session_id]);
 $teacher_id = $stmt_get_id->fetchColumn();
 
 // Get Teacher's Assigned Classes
-$stmt_classes = $pdo->prepare("SELECT c.id, c.class_name FROM classes c JOIN teacher_class_assignments tca ON c.id = tca.class_id WHERE tca.teacher_user_id = ?");
+$stmt_classes = $pdo->prepare("
+    SELECT DISTINCT c.id AS class_id, c.class_name, IFNULL(tca.section_id, 0) AS section_id, sec.section_name
+    FROM teacher_class_assignments tca
+    JOIN classes c ON tca.class_id = c.id
+    LEFT JOIN sections sec ON tca.section_id = sec.id
+    WHERE tca.teacher_user_id = ?
+    ORDER BY c.class_name, sec.section_name
+");
 $stmt_classes->execute([$teacher_id]);
 $assigned_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 
 // Handle Filter Request
-$class_id = $_GET['class_id'] ?? '';
+[$class_id, $section_id] = array_pad(explode('|', $_GET['class_id'] ?? ''), 2, null);
+$section_id = $section_id !== null && $section_id !== '' ? (int)$section_id : null;
 $exam_type = $_GET['exam_type'] ?? 'Monthly Test';
 $exam_month = $_GET['exam_month'] ?? date('Y-m');
 
@@ -38,13 +46,13 @@ if ($class_id && $exam_type && $exam_month) {
 
     // 2. Get Assessments (Subjects) for this specific Exam
     $stmt_assessments = $pdo->prepare("
-        SELECT id, subject_name, total_marks 
-        FROM assessments 
-        WHERE class_id = ? AND assessment_type = ? AND assessment_date LIKE ?
+        SELECT id, subject_name, total_marks
+        FROM assessments
+        WHERE class_id = ? AND IFNULL(section_id,0) = IFNULL(?,0) AND assessment_type = ? AND assessment_date LIKE ?
         ORDER BY subject_name ASC
     ");
     // Append '%' to match the year-month (e.g. '2026-05%')
-    $stmt_assessments->execute([$class_id, $exam_type, $exam_month . '%']);
+    $stmt_assessments->execute([$class_id, $section_id, $exam_type, $exam_month . '%']);
     $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
 
     if (!empty($assessments)) {
@@ -59,12 +67,12 @@ if ($class_id && $exam_type && $exam_month) {
 
         // 3. Get all active students in this class
         $stmt_students = $pdo->prepare("
-            SELECT u.id, u.full_name, sd.father_name 
-            FROM users u 
-            JOIN student_details sd ON u.id = sd.user_id 
-            WHERE sd.class_id = ? AND u.status = 'Active'
+            SELECT u.id, u.full_name, sd.father_name
+            FROM users u
+            JOIN student_details sd ON u.id = sd.user_id
+            WHERE sd.class_id = ? AND IFNULL(sd.section_id,0) = IFNULL(?,0) AND u.status = 'Active'
         ");
-        $stmt_students->execute([$class_id]);
+        $stmt_students->execute([$class_id, $section_id]);
         $students = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
 
         // 4. Get all scores for these assessments
@@ -182,7 +190,9 @@ if ($class_id && $exam_type && $exam_month) {
                                 <select name="class_id" class="form-select border-primary" required>
                                     <option value="">Select Class...</option>
                                     <?php foreach($assigned_classes as $cls): ?>
-                                        <option value="<?= $cls['id'] ?>" <?= $class_id == $cls['id'] ? 'selected' : '' ?>>Class <?= htmlspecialchars($cls['class_name']) ?></option>
+                                        <option value="<?= $cls['class_id'] ?>|<?= $cls['section_id'] ?>" <?= ($class_id == $cls['class_id'] && $section_id == $cls['section_id']) ? 'selected' : '' ?>>
+                                            Class <?= htmlspecialchars($cls['class_name']) ?><?= $cls['section_name'] ? ' (' . htmlspecialchars($cls['section_name']) . ')' : '' ?>
+                                        </option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
