@@ -52,10 +52,9 @@ $assigned_classes = [];
 try {
     // 3. Check exact class assignments matching EITHER the user_id or detail_id
     $stmt_assignments = $pdo->prepare("
-        SELECT DISTINCT c.id as class_id, c.class_name 
-        FROM teacher_class_assignments tca 
-        JOIN classes c ON tca.class_id = c.id 
-        WHERE tca.teacher_user_id = ? OR tca.teacher_user_id = ?
+        SELECT DISTINCT c.id as class_id, c.class_name
+        FROM (SELECT DISTINCT class_id, section_id FROM teacher_class_assignments WHERE teacher_user_id = ? OR teacher_user_id = ?) tca
+        JOIN classes c ON tca.class_id = c.id
     ");
     $stmt_assignments->execute([$teacher_user_id, $teacher_details_id]);
     $assigned_classes = $stmt_assignments->fetchAll(PDO::FETCH_ASSOC);
@@ -63,7 +62,7 @@ try {
     if (!empty($assigned_classes)) {
         // 4. Fetch flat list of students for DataTables
         $stmt = $pdo->prepare("
-            SELECT DISTINCT 
+            SELECT DISTINCT
                 c.id as class_id,
                 c.class_name,
                 s.id as section_id,
@@ -73,12 +72,11 @@ try {
                 u.email,
                 sd.cell_no as phone,
                 sd.father_name
-            FROM teacher_class_assignments tca
+            FROM (SELECT DISTINCT class_id, section_id FROM teacher_class_assignments WHERE teacher_user_id = ? OR teacher_user_id = ?) tca
             JOIN classes c ON tca.class_id = c.id
-            JOIN student_details sd ON sd.class_id = c.id
+            JOIN student_details sd ON sd.class_id = tca.class_id AND IFNULL(sd.section_id,0) = IFNULL(tca.section_id,0)
             JOIN users u ON sd.user_id = u.id
             LEFT JOIN sections s ON sd.section_id = s.id
-            WHERE tca.teacher_user_id = ? OR tca.teacher_user_id = ?
             ORDER BY c.class_name, s.section_name, u.full_name
         ");
         $stmt->execute([$teacher_user_id, $teacher_details_id]);
