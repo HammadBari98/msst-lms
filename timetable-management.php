@@ -85,6 +85,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 ->execute([(int)$_POST['is_active'], (int)$_POST['day_id']]);
             echo json_encode(['success' => true]); exit;
         }
+        if ($_POST['action'] === 'save_entry') {
+            $class_id = (int)$_POST['class_id'];
+            $section_id = $_POST['section_id'] !== '' ? (int)$_POST['section_id'] : null;
+            $day_name = $_POST['day_name'];
+            $period_id = (int)$_POST['period_id'];
+            $subject_id = (int)$_POST['subject_id'];
+            $teacher_user_id = (int)$_POST['teacher_user_id'];
+            $room = trim($_POST['room'] ?? '') ?: null;
+
+            $pdo->beginTransaction();
+            $del = $pdo->prepare("DELETE FROM timetable_entries WHERE class_id = ? AND IFNULL(section_id,0) = IFNULL(?,0) AND day_name = ? AND period_id = ?");
+            $del->execute([$class_id, $section_id, $day_name, $period_id]);
+            $ins = $pdo->prepare("INSERT INTO timetable_entries (class_id, section_id, day_name, period_id, subject_id, teacher_user_id, room) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $ins->execute([$class_id, $section_id, $day_name, $period_id, $subject_id, $teacher_user_id, $room]);
+            $pdo->commit();
+
+            $conflict = null;
+            $stmt_conflict = $pdo->prepare("
+                SELECT c.class_name, sec.section_name
+                FROM timetable_entries te
+                JOIN classes c ON c.id = te.class_id
+                LEFT JOIN sections sec ON sec.id = te.section_id
+                WHERE te.teacher_user_id = ? AND te.day_name = ? AND te.period_id = ?
+                  AND NOT (te.class_id = ? AND IFNULL(te.section_id,0) = IFNULL(?,0))
+            ");
+            $stmt_conflict->execute([$teacher_user_id, $day_name, $period_id, $class_id, $section_id]);
+            $conflict_row = $stmt_conflict->fetch(PDO::FETCH_ASSOC);
+            if ($conflict_row) {
+                $conflict = "This teacher is already teaching Class {$conflict_row['class_name']}" .
+                    ($conflict_row['section_name'] ? " ({$conflict_row['section_name']})" : "") .
+                    " at this same day and period.";
+            }
+
+            echo json_encode(['success' => true, 'conflict' => $conflict]); exit;
+        }
+        if ($_POST['action'] === 'delete_entry') {
+            $class_id = (int)$_POST['class_id'];
+            $section_id = $_POST['section_id'] !== '' ? (int)$_POST['section_id'] : null;
+            $pdo->prepare("DELETE FROM timetable_entries WHERE class_id = ? AND IFNULL(section_id,0) = IFNULL(?,0) AND day_name = ? AND period_id = ?")
+                ->execute([$class_id, $section_id, $_POST['day_name'], (int)$_POST['period_id']]);
+            echo json_encode(['success' => true]); exit;
+        }
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => $e->getMessage()]); exit;
     }
@@ -95,6 +137,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 // =======================================================
 $periods = $pdo->query("SELECT * FROM timetable_periods ORDER BY period_number")->fetchAll(PDO::FETCH_ASSOC);
 $school_days = $pdo->query("SELECT * FROM school_days ORDER BY day_order")->fetchAll(PDO::FETCH_ASSOC);
+
+// Class+Section list for the picker (only sections actually tied to a real class)
+$class_sections = $pdo->query("
+    SELECT c.id AS class_id, c.class_name, sec.id AS section_id, sec.section_name
+    FROM classes c
+    JOIN sections sec ON sec.class_id = c.id
+    ORDER BY c.class_name, sec.section_name
+")->fetchAll(PDO::FETCH_ASSOC);
+
+[$selected_class, $selected_section] = array_pad(explode('|', $_GET['class_section'] ?? ''), 2, null);
+$selected_section = $selected_section !== null && $selected_section !== '' ? (int)$selected_section : null;
+
+$grid_entries = [];       // keyed "day|period_id" => entry row
+$section_subjects = [];   // [{id, subject_name}]
+$teachers_by_subject = []; // subject_id => [{id, full_name}]
+
+if ($selected_class) {
+    $stmt_subjects = $pdo->prepare("
+        SELECT s.id, s.subject_name FROM program_subjects ps
+        JOIN subjects s ON s.id = ps.subject_id
+        WHERE ps.program_id = ?
+        ORDER BY s.subject_name
+    ");
+    $stmt_subjects->execute([$selected_section]);
+    $section_subjects = $stmt_subjects->fetchAll(PDO::FETCH_ASSOC);
+
+    $stmt_teachers = $pdo->prepare("
+        SELECT tca.subject_id, u.id, u.full_name
+        FROM teacher_class_assignments tca
+        JOIN users u ON u.id = tca.teacher_user_id
+        WHERE tca.class_id = ? AND IFNULL(tca.section_id,0) = IFNULL(?,0) AND tca.subject_id IS NOT NULL
+        ORDER BY u.full_name
+    ");
+    $stmt_teachers->execute([(int)$selected_class, $selected_section]);
+    foreach ($stmt_teachers->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $teachers_by_subject[$row['subject_id']][] = ['id' => $row['id'], 'full_name' => $row['full_name']];
+    }
+
+    $stmt_entries = $pdo->prepare("
+        SELECT te.*, s.subject_name, u.full_name AS teacher_name
+        FROM timetable_entries te
+        JOIN subjects s ON s.id = te.subject_id
+        JOIN users u ON u.id = te.teacher_user_id
+        WHERE te.class_id = ? AND IFNULL(te.section_id,0) = IFNULL(?,0)
+    ");
+    $stmt_entries->execute([(int)$selected_class, $selected_section]);
+    foreach ($stmt_entries->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $grid_entries[$row['day_name'] . '|' . $row['period_id']] = $row;
+    }
+}
+
+$active_days = array_filter($school_days, fn($d) => $d['is_active']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -169,6 +263,72 @@ $school_days = $pdo->query("SELECT * FROM school_days ORDER BY day_order")->fetc
                 </div>
             </div>
 
+            <div class="card shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h6 class="m-0 fw-bold text-primary">Weekly Timetable</h6>
+                </div>
+                <div class="card-body">
+                    <form method="GET" class="mb-4">
+                        <label class="form-label fw-bold">Class / Section</label>
+                        <select name="class_section" class="form-select" style="max-width:400px" onchange="this.form.submit()">
+                            <option value="">-- Select a class/section --</option>
+                            <?php foreach ($class_sections as $cs): $key = $cs['class_id'] . '|' . $cs['section_id']; ?>
+                                <option value="<?= htmlspecialchars($key) ?>" <?= ($selected_class == $cs['class_id'] && $selected_section == $cs['section_id']) ? 'selected' : '' ?>>
+                                    Class <?= htmlspecialchars($cs['class_name']) ?> (<?= htmlspecialchars($cs['section_name']) ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </form>
+
+                    <?php if (!$selected_class): ?>
+                        <div class="alert alert-info">Select a class/section above to view or edit its timetable.</div>
+                    <?php elseif (empty($periods)): ?>
+                        <div class="alert alert-warning">No periods defined yet — add periods above first.</div>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle text-center">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Period</th>
+                                        <?php foreach ($active_days as $d): ?>
+                                            <th><?= htmlspecialchars($d['day_name']) ?></th>
+                                        <?php endforeach; ?>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($periods as $p): ?>
+                                    <tr>
+                                        <td class="fw-bold"><?= htmlspecialchars($p['label']) ?><br><small class="text-muted"><?= substr($p['start_time'],0,5) ?>-<?= substr($p['end_time'],0,5) ?></small></td>
+                                        <?php if ($p['is_break']): ?>
+                                            <td colspan="<?= count($active_days) ?>" class="bg-light fw-bold text-uppercase text-secondary"><?= htmlspecialchars($p['label']) ?></td>
+                                        <?php else: foreach ($active_days as $d):
+                                            $entry = $grid_entries[$d['day_name'] . '|' . $p['id']] ?? null; ?>
+                                            <td>
+                                                <select class="form-select form-select-sm mb-1 cell-subject" data-day="<?= htmlspecialchars($d['day_name']) ?>" data-period="<?= (int)$p['id'] ?>">
+                                                    <option value="">--</option>
+                                                    <?php foreach ($section_subjects as $sub): ?>
+                                                        <option value="<?= (int)$sub['id'] ?>" <?= ($entry && $entry['subject_id'] == $sub['id']) ? 'selected' : '' ?>><?= htmlspecialchars($sub['subject_name']) ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <select class="form-select form-select-sm mb-1 cell-teacher">
+                                                    <option value="">--</option>
+                                                    <?php if ($entry): ?>
+                                                        <option value="<?= (int)$entry['teacher_user_id'] ?>" selected><?= htmlspecialchars($entry['teacher_name']) ?></option>
+                                                    <?php endif; ?>
+                                                </select>
+                                                <input type="text" class="form-control form-control-sm mb-1 cell-room" placeholder="Room" value="<?= htmlspecialchars($entry['room'] ?? '') ?>">
+                                                <button class="btn btn-sm btn-primary w-100" onclick="saveCell(this)"><i class="fas fa-save"></i></button>
+                                            </td>
+                                        <?php endforeach; endif; ?>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -215,6 +375,47 @@ async function toggleDay(dayId, isActive) {
     const res = await fetch('timetable-management.php', { method: 'POST', body: fd });
     const data = await res.json();
     if (!data.success) showAlert(data.message, 'danger');
+}
+
+const teachersBySubject = <?= json_encode($teachers_by_subject) ?>;
+const selectedClass = <?= json_encode($selected_class) ?>;
+const selectedSection = <?= json_encode($selected_section) ?>;
+
+document.querySelectorAll('.cell-subject').forEach(sel => {
+    sel.addEventListener('change', () => {
+        const teacherSelect = sel.closest('td').querySelector('.cell-teacher');
+        const list = teachersBySubject[sel.value] || [];
+        teacherSelect.innerHTML = '<option value="">--</option>' +
+            list.map(t => `<option value="${t.id}">${t.full_name}</option>`).join('');
+    });
+});
+
+async function saveCell(btn) {
+    const td = btn.closest('td');
+    const daySelectEl = td.querySelector('.cell-subject');
+    const subjectId = daySelectEl.value;
+    const teacherId = td.querySelector('.cell-teacher').value;
+    const room = td.querySelector('.cell-room').value;
+
+    if (!subjectId || !teacherId) { showAlert('Select both a subject and a teacher before saving.', 'warning'); return; }
+
+    const fd = new FormData();
+    fd.append('action', 'save_entry');
+    fd.append('class_id', selectedClass);
+    fd.append('section_id', selectedSection ?? '');
+    fd.append('day_name', daySelectEl.dataset.day);
+    fd.append('period_id', daySelectEl.dataset.period);
+    fd.append('subject_id', subjectId);
+    fd.append('teacher_user_id', teacherId);
+    fd.append('room', room);
+
+    const res = await fetch('timetable-management.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+        showAlert(data.conflict ? data.conflict : 'Saved.', data.conflict ? 'warning' : 'success');
+    } else {
+        showAlert(data.message, 'danger');
+    }
 }
 </script>
 </body>
