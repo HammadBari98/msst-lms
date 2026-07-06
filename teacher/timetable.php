@@ -1,46 +1,37 @@
 <?php
 session_start();
-// require_once __DIR__ . '/../config/db_config.php'; // Kept commented for static preview
+require_once __DIR__ . '/../config/db_config.php';
 
-// --- Authentication Check ---
 if (!isset($_SESSION['teacher_logged_in'])) {
     header('Location: login.php');
     exit();
 }
 
+$teacher_session_id = $_SESSION['teacher_id'];
 $teacher_name = $_SESSION['teacher_name'] ?? 'Teacher';
 
-// --- START: DUMMY DATA FOR THE TEACHER'S TIMETABLE ---
-// This data represents the teacher's full weekly schedule.
-$teacher_weekly_schedule = [
-    'Monday' => [
-        ['start_time' => '09:00', 'end_time' => '10:00', 'course_name' => 'Database Systems', 'class_name' => 'BSCS 4th Semester', 'room' => 'C-305'],
-        ['start_time' => '10:00', 'end_time' => '11:30', 'course_name' => 'Intro to Computer Science', 'class_name' => 'BSCS 1st Semester', 'room' => 'A-205'],
-    ],
-    'Tuesday' => [
-        ['start_time' => '11:00', 'end_time' => '12:00', 'course_name' => 'Physics Practical', 'class_name' => '1st Year Pre-Eng', 'room' => 'Physics Lab'],
-        ['start_time' => '13:00', 'end_time' => '14:30', 'course_name' => 'Linear Algebra', 'class_name' => 'BS Math 2nd Semester', 'room' => 'B-112'],
-    ],
-    'Wednesday' => [
-        ['start_time' => '09:00', 'end_time' => '10:00', 'course_name' => 'Database Systems', 'class_name' => 'BSCS 4th Semester', 'room' => 'C-305'],
-        ['start_time' => '10:00', 'end_time' => '11:30', 'course_name' => 'Intro to Computer Science', 'class_name' => 'BSCS 1st Semester', 'room' => 'A-205'],
-    ],
-    'Thursday' => [
-        ['start_time' => '13:00', 'end_time' => '14:30', 'course_name' => 'Linear Algebra', 'class_name' => 'BS Math 2nd Semester', 'room' => 'B-112'],
-    ],
-    'Friday' => [
-        ['start_time' => '09:00', 'end_time' => '10:00', 'course_name' => 'Database Systems', 'class_name' => 'BSCS 4th Semester', 'room' => 'C-305'],
-        ['start_time' => '11:00', 'end_time' => '12:00', 'course_name' => 'Physics - 1st Year', 'class_name' => '1st Year Pre-Eng', 'room' => 'A-201'],
-    ],
-    'Saturday' => [], // Day with no classes
-];
+$stmt_get_id = $pdo->prepare("SELECT id FROM users WHERE id = ? OR user_id_string = ? LIMIT 1");
+$stmt_get_id->execute([$teacher_session_id, $teacher_session_id]);
+$teacher_id = $stmt_get_id->fetchColumn();
 
-// Get the current day of the week to make its tab active.
-$current_day = date('l');
-if (!array_key_exists($current_day, $teacher_weekly_schedule)) {
-    $current_day = 'Monday'; // Default to Monday if today is Sunday or not in the schedule
+$periods = $pdo->query("SELECT * FROM timetable_periods ORDER BY period_number")->fetchAll(PDO::FETCH_ASSOC);
+$active_days = $pdo->query("SELECT * FROM school_days WHERE is_active = 1 ORDER BY day_order")->fetchAll(PDO::FETCH_ASSOC);
+
+$schedule = []; // "day|period_id" => entry
+if ($teacher_id) {
+    $stmt = $pdo->prepare("
+        SELECT te.day_name, te.period_id, te.room, s.subject_name, c.class_name, sec.section_name
+        FROM timetable_entries te
+        JOIN subjects s ON s.id = te.subject_id
+        JOIN classes c ON c.id = te.class_id
+        LEFT JOIN sections sec ON sec.id = te.section_id
+        WHERE te.teacher_user_id = ?
+    ");
+    $stmt->execute([$teacher_id]);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $schedule[$row['day_name'] . '|' . $row['period_id']] = $row;
+    }
 }
-// --- END OF DUMMY DATA ---
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -48,21 +39,8 @@ if (!array_key_exists($current_day, $teacher_weekly_schedule)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Timetable | <?= htmlspecialchars($teacher_name) ?></title>
-    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <style>
-        :root { --primary: #007bff; --secondary: #6c757d; --light-bg: #f8f9fc; --dark-text: #343a40; }
-        body { font-family: 'Segoe UI', sans-serif; background-color: var(--light-bg); overflow-x: hidden; }
-        #main-content { margin-left: 250px; transition: all 0.3s; }
-        #main-content.collapsed { margin-left: 70px; }
-        @media (max-width: 768px) { .sidebar { left: -250px; } .sidebar.show { left: 0; } #main-content, #main-content.collapsed { margin-left: 0; } }
-        .card { box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); margin-bottom: 1.5rem; border: none;}
-        .nav-tabs .nav-link { color: var(--dark-text); }
-        .nav-tabs .nav-link.active { background-color: var(--primary); color: white; border-color: var(--primary); }
-        .schedule-item { border-left: 4px solid var(--primary); border-radius: 0.25rem; }
-    </style>
 </head>
 <body>
 
@@ -70,90 +48,52 @@ if (!array_key_exists($current_day, $teacher_weekly_schedule)) {
 
 <div id="main-content">
     <?php include 'header.php'; ?>
-    
-    <div class="content-wrapper p-3 p-md-4">
+
+    <div class="content-wrapper p-4">
         <div class="container-fluid">
-            <h1 class="h3 mb-4">My Weekly Teaching Schedule</h1>
+            <h1 class="h3 mb-4">My Timetable</h1>
 
-            <div class="card shadow-sm">
-                <div class="card-header bg-white border-0">
-                    <ul class="nav nav-tabs card-header-tabs" id="scheduleTab" role="tablist">
-                        <?php foreach ($teacher_weekly_schedule as $day => $classes): ?>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link <?= ($day == $current_day) ? 'active' : '' ?>" 
-                                        data-bs-toggle="tab" 
-                                        data-bs-target="#<?= strtolower($day) ?>-pane" 
-                                        type="button"><?= $day ?></button>
-                            </li>
+            <?php if (empty($periods)): ?>
+                <div class="alert alert-info">The timetable has not been set up yet. Please check back later.</div>
+            <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Period</th>
+                            <?php foreach ($active_days as $d): ?>
+                                <th><?= htmlspecialchars($d['day_name']) ?></th>
+                            <?php endforeach; ?>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($periods as $p): ?>
+                        <tr>
+                            <td class="fw-bold"><?= htmlspecialchars($p['label']) ?><br><small class="text-muted"><?= substr($p['start_time'],0,5) ?>-<?= substr($p['end_time'],0,5) ?></small></td>
+                            <?php if ($p['is_break']): ?>
+                                <td colspan="<?= count($active_days) ?>" class="bg-light fw-bold text-uppercase text-secondary"><?= htmlspecialchars($p['label']) ?></td>
+                            <?php else: foreach ($active_days as $d):
+                                $entry = $schedule[$d['day_name'] . '|' . $p['id']] ?? null; ?>
+                                <td>
+                                    <?php if ($entry): ?>
+                                        <div class="fw-bold"><?= htmlspecialchars($entry['subject_name']) ?></div>
+                                        <div class="small text-muted">Class <?= htmlspecialchars($entry['class_name']) ?><?= $entry['section_name'] ? ' (' . htmlspecialchars($entry['section_name']) . ')' : '' ?></div>
+                                        <?php if ($entry['room']): ?><div class="small text-muted"><?= htmlspecialchars($entry['room']) ?></div><?php endif; ?>
+                                    <?php else: ?>
+                                        <span class="text-muted">&mdash;</span>
+                                    <?php endif; ?>
+                                </td>
+                            <?php endforeach; endif; ?>
+                        </tr>
                         <?php endforeach; ?>
-                    </ul>
-                </div>
-                <div class="card-body">
-                    <div class="tab-content" id="scheduleTabContent">
-                        <?php foreach ($teacher_weekly_schedule as $day => $classes): ?>
-                            <div class="tab-pane fade <?= ($day == $current_day) ? 'show active' : '' ?>" 
-                                 id="<?= strtolower($day) ?>-pane" 
-                                 role="tabpanel">
-                                 
-                                <?php if (empty($classes)): ?>
-                                    <div class="text-center p-5">
-                                        <i class="fas fa-coffee fa-3x text-muted"></i>
-                                        <p class="mt-3 text-muted">No classes scheduled for today.</p>
-                                    </div>
-                                <?php else: ?>
-                                    <ul class="list-group list-group-flush">
-                                        <?php foreach ($classes as $class_item): ?>
-                                            <li class="list-group-item p-3 schedule-item mb-2">
-                                                <div class="d-flex w-100 justify-content-between">
-                                                    <h5 class="mb-1 text-primary"><?= htmlspecialchars($class_item['course_name']) ?></h5>
-                                                    <span class="fw-bold"><?= date('g:i A', strtotime($class_item['start_time'])) ?> - <?= date('g:i A', strtotime($class_item['end_time'])) ?></span>
-                                                </div>
-                                                <p class="mb-1 text-muted">
-                                                    <i class="fas fa-users fa-fw me-2"></i> Class: <strong><?= htmlspecialchars($class_item['class_name']) ?></strong>
-                                                </p>
-                                                <p class="mb-0 text-muted">
-                                                    <i class="fas fa-map-marker-alt fa-fw me-2"></i> Room: <strong><?= htmlspecialchars($class_item['room']) ?></strong>
-                                                </p>
-                                            </li>
-                                        <?php endforeach; ?>
-                                    </ul>
-                                <?php endif; ?>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
+                    </tbody>
+                </table>
             </div>
-
+            <?php endif; ?>
         </div>
     </div>
-    
-   <?php include 'footer.php'; ?>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-    // The final, correct sidebar toggle script for desktop and mobile
-    const sidebar = document.getElementById('sidebar');
-    const mainContent = document.getElementById('main-content');
-    const toggleBtn = document.getElementById('sidebarToggle');
-    if (toggleBtn && sidebar && mainContent) {
-        toggleBtn.addEventListener('click', (event) => {
-            event.stopPropagation();
-            if (window.innerWidth <= 768) {
-                sidebar.classList.toggle('show');
-            } else {
-                sidebar.classList.toggle('collapsed');
-                mainContent.classList.toggle('collapsed');
-            }
-        });
-    }
-    document.addEventListener('click', function (event) {
-        if (sidebar && toggleBtn && !sidebar.contains(event.target) && !toggleBtn.contains(event.target)) {
-            if (sidebar.classList.contains('show')) {
-                sidebar.classList.remove('show');
-            }
-        }
-    });
-</script>
 </body>
 </html>
