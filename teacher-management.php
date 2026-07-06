@@ -22,30 +22,30 @@ if (isset($_SESSION['action_msg'])) {
 // ---------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] == 'assign_classes') {
     $teacher_id = $_POST['teacher_id'];
-    $class_ids = $_POST['class_ids'] ?? []; // Array of selected classes
+    $assignments = $_POST['assignments'] ?? []; // Array of "class_id|section_id|subject_id"
 
     try {
         $pdo->beginTransaction();
-        
-        // 1. Delete all existing assignments for this teacher
+
         $stmt = $pdo->prepare("DELETE FROM teacher_class_assignments WHERE teacher_user_id = ?");
         $stmt->execute([$teacher_id]);
 
-        // 2. Insert the newly selected assignments
-        if (!empty($class_ids)) {
-            $insert_stmt = $pdo->prepare("INSERT INTO teacher_class_assignments (teacher_user_id, class_id) VALUES (?, ?)");
-            foreach ($class_ids as $cid) {
-                $insert_stmt->execute([$teacher_id, $cid]);
+        if (!empty($assignments)) {
+            $insert_stmt = $pdo->prepare("INSERT INTO teacher_class_assignments (teacher_user_id, class_id, section_id, subject_id) VALUES (?, ?, ?, ?)");
+            foreach ($assignments as $triple) {
+                [$cid, $sid, $subid] = array_pad(explode('|', $triple), 3, null);
+                if (!$cid) continue;
+                $insert_stmt->execute([$teacher_id, (int)$cid, $sid ? (int)$sid : null, $subid ? (int)$subid : null]);
             }
         }
-        
+
         $pdo->commit();
-        $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible fade show"><i class="fas fa-check-circle me-2"></i>Classes (and their students) successfully assigned to the teacher!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+        $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible fade show"><i class="fas fa-check-circle me-2"></i>Assignments (and their students) successfully saved!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
     } catch (Exception $e) {
         $pdo->rollBack();
         $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible fade show"><i class="fas fa-times-circle me-2"></i>Error: ' . $e->getMessage() . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
     }
-    
+
     header("Location: teacher-management.php");
     exit;
 }
@@ -54,18 +54,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // FETCH DATA FOR THE UI
 // ---------------------------------------------------------
 
-// Fetch all available classes for the modal checkboxes
-$classes = $pdo->query("SELECT * FROM classes ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+// Build nested Class -> Section -> Subject structure for the assignment picker
+$class_structure = [];
+$structure_rows = $pdo->query("
+    SELECT c.id AS class_id, c.class_name, sec.id AS section_id, sec.section_name,
+           s.id AS subject_id, s.subject_name
+    FROM classes c
+    JOIN sections sec ON sec.class_id = c.id
+    JOIN program_subjects ps ON ps.program_id = sec.id
+    JOIN subjects s ON s.id = ps.subject_id
+    ORDER BY c.class_name, sec.section_name, s.subject_name
+")->fetchAll(PDO::FETCH_ASSOC);
+foreach ($structure_rows as $row) {
+    $cid = $row['class_id']; $sid = $row['section_id'];
+    if (!isset($class_structure[$cid])) {
+        $class_structure[$cid] = ['class_name' => $row['class_name'], 'sections' => []];
+    }
+    if (!isset($class_structure[$cid]['sections'][$sid])) {
+        $class_structure[$cid]['sections'][$sid] = ['section_name' => $row['section_name'], 'subjects' => []];
+    }
+    $class_structure[$cid]['sections'][$sid]['subjects'][] = ['subject_id' => $row['subject_id'], 'subject_name' => $row['subject_name']];
+}
 
-// Fetch all teachers and their currently assigned classes
+// Fetch all teachers and their currently assigned class/section/subject triples
 $stmt = $pdo->query("
     SELECT u.id, u.user_id_string, u.full_name, u.email, u.status,
-           GROUP_CONCAT(c.id) as assigned_class_ids,
-           GROUP_CONCAT(c.class_name SEPARATOR ', ') as assigned_class_names
+           GROUP_CONCAT(DISTINCT CONCAT(tca.class_id, '|', IFNULL(tca.section_id,0), '|', IFNULL(tca.subject_id,0))) as assigned_keys,
+           GROUP_CONCAT(DISTINCT CONCAT(c.class_name, IF(sec.section_name IS NOT NULL, CONCAT(' - ', sec.section_name), ''), IF(s.subject_name IS NOT NULL, CONCAT(' (', s.subject_name, ')'), '')) SEPARATOR '||') as assigned_labels
     FROM users u
     JOIN roles r ON u.role_id = r.id
     LEFT JOIN teacher_class_assignments tca ON u.id = tca.teacher_user_id
     LEFT JOIN classes c ON tca.class_id = c.id
+    LEFT JOIN sections sec ON tca.section_id = sec.id
+    LEFT JOIN subjects s ON tca.subject_id = s.id
     WHERE r.role_name = 'Teacher'
     GROUP BY u.id
     ORDER BY u.full_name
@@ -149,22 +170,21 @@ $teachers = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                                 </span>
                                             </td>
                                             <td>
-                                                <?php 
-                                                if (!empty($teacher['assigned_class_names'])) {
-                                                    $class_names = explode(', ', $teacher['assigned_class_names']);
-                                                    foreach ($class_names as $cname) {
-                                                        echo '<span class="class-badge">Class ' . htmlspecialchars($cname) . '</span>';
+                                                <?php
+                                                if (!empty($teacher['assigned_labels'])) {
+                                                    foreach (explode('||', $teacher['assigned_labels']) as $label) {
+                                                        echo '<span class="class-badge">' . htmlspecialchars($label) . '</span>';
                                                     }
                                                 } else {
-                                                    echo '<span class="text-muted small">No classes assigned</span>';
+                                                    echo '<span class="text-muted small">No assignments</span>';
                                                 }
                                                 ?>
                                             </td>
                                             <td class="text-center">
                                                 <button class="btn btn-sm btn-primary" onclick="openAssignModal(
-                                                    <?= $teacher['id'] ?>, 
-                                                    '<?= htmlspecialchars($teacher['full_name'], ENT_QUOTES) ?>', 
-                                                    '<?= $teacher['assigned_class_ids'] ?>'
+                                                    <?= $teacher['id'] ?>,
+                                                    '<?= htmlspecialchars($teacher['full_name'], ENT_QUOTES) ?>',
+                                                    '<?= htmlspecialchars($teacher['assigned_keys'] ?? '', ENT_QUOTES) ?>'
                                                 )">
                                                     <i class="fas fa-users-cog me-1"></i> Assign Classes
                                                 </button>
@@ -199,18 +219,24 @@ $teachers = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <p class="text-muted small mb-3">Check the classes you want to assign to this teacher. The teacher will automatically be assigned all active students within these classes for grading and scoring.</p>
                         
                         <div class="class-checkbox-container">
-                            <?php foreach ($classes as $class): ?>
-                                <div class="form-check mb-2 p-2 border-bottom">
-                                    <input class="form-check-input class-checkbox ms-1" type="checkbox" name="class_ids[]" value="<?= $class['id'] ?>" id="class_<?= $class['id'] ?>">
-                                    <label class="form-check-label w-100 ms-2 fw-bold" for="class_<?= $class['id'] ?>" style="cursor: pointer;">
-                                        Class <?= htmlspecialchars($class['class_name']) ?>
-                                    </label>
+                            <?php if (empty($class_structure)): ?>
+                                <div class="text-center text-muted p-3">No subjects found. Add classes, programs, and subjects in Class Management first.</div>
+                            <?php else: foreach ($class_structure as $cid => $cls): ?>
+                                <div class="mb-3">
+                                    <div class="fw-bold text-primary border-bottom pb-1 mb-2">Class <?= htmlspecialchars($cls['class_name']) ?></div>
+                                    <?php foreach ($cls['sections'] as $sid => $sec): ?>
+                                        <div class="ms-2 mb-2">
+                                            <div class="fw-semibold text-secondary small mb-1"><?= htmlspecialchars($sec['section_name']) ?></div>
+                                            <?php foreach ($sec['subjects'] as $sub): $key = $cid . '|' . $sid . '|' . $sub['subject_id']; ?>
+                                                <div class="form-check ms-3">
+                                                    <input class="form-check-input assignment-checkbox" type="checkbox" name="assignments[]" value="<?= htmlspecialchars($key) ?>" id="asg_<?= $cid ?>_<?= $sid ?>_<?= $sub['subject_id'] ?>">
+                                                    <label class="form-check-label" for="asg_<?= $cid ?>_<?= $sid ?>_<?= $sub['subject_id'] ?>"><?= htmlspecialchars($sub['subject_name']) ?></label>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endforeach; ?>
                                 </div>
-                            <?php endforeach; ?>
-                            
-                            <?php if (empty($classes)): ?>
-                                <div class="text-center text-muted p-3">No classes found in the database.</div>
-                            <?php endif; ?>
+                            <?php endforeach; endif; ?>
                         </div>
                     </div>
                     
@@ -237,27 +263,20 @@ $teachers = $stmt->fetchAll(PDO::FETCH_ASSOC);
             });
         });
 
-        // Function to handle opening the Assign Modal and pre-checking existing classes
-        function openAssignModal(teacherId, teacherName, assignedClassIds) {
-            // Set Hidden ID and Title Name
+        // Function to handle opening the Assign Modal and pre-checking existing assignments
+        function openAssignModal(teacherId, teacherName, assignedKeys) {
             document.getElementById('assignTeacherId').value = teacherId;
             document.getElementById('assignTeacherName').textContent = teacherName;
-            
-            // Uncheck all checkboxes first to reset the modal
-            document.querySelectorAll('.class-checkbox').forEach(cb => cb.checked = false);
-            
-            // Check the boxes for the classes this teacher is already assigned to
-            if (assignedClassIds) {
-                const ids = assignedClassIds.split(',');
-                ids.forEach(id => {
-                    const checkbox = document.getElementById('class_' + id);
-                    if (checkbox) {
-                        checkbox.checked = true;
-                    }
+
+            document.querySelectorAll('.assignment-checkbox').forEach(cb => cb.checked = false);
+
+            if (assignedKeys) {
+                assignedKeys.split(',').forEach(key => {
+                    const cb = document.querySelector(`.assignment-checkbox[value="${key}"]`);
+                    if (cb) cb.checked = true;
                 });
             }
-            
-            // Show the modal
+
             new bootstrap.Modal(document.getElementById('assignClassesModal')).show();
         }
 
