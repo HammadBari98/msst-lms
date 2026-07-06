@@ -39,6 +39,15 @@ try {
     }
 } catch (PDOException $e) { /* Ignore */ }
 
+// =======================================================
+// AUTO-PATCHER: assessment_type was a strict ENUM('Test','Assignment','Exam')
+// that silently truncated free-text type names (e.g. "Monthly Test") to ''
+// under non-strict SQL mode. Widen it to match assessment_types.name.
+// =======================================================
+try {
+    $pdo->exec("ALTER TABLE assessments MODIFY assessment_type VARCHAR(100) NOT NULL DEFAULT ''");
+} catch (PDOException $e) { /* Ignore if already widened */ }
+
 // Handle Form Submissions
 $msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
