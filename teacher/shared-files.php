@@ -50,6 +50,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if ($title === '' || empty($recipients)) {
                 throw new Exception("Title and at least one recipient are required.");
             }
+
+            $allowed_keys = [];
+            foreach ($pdo->query("SELECT id FROM admin")->fetchAll(PDO::FETCH_ASSOC) as $a) {
+                if ($current_type === 'admin' && (int)$a['id'] === $current_ref_id) continue;
+                $allowed_keys['admin|' . $a['id']] = true;
+            }
+            $stmt_valid_users = $pdo->query("
+                SELECT u.id FROM users u JOIN roles r ON u.role_id = r.id
+                WHERE r.role_name IN ('Teacher','Staff') AND u.status = 'Active'
+            ");
+            foreach ($stmt_valid_users->fetchAll(PDO::FETCH_ASSOC) as $u) {
+                if ($current_type === 'user' && (int)$u['id'] === $current_ref_id) continue;
+                $allowed_keys['user|' . $u['id']] = true;
+            }
+            $recipients = array_filter($recipients, fn($r) => isset($allowed_keys[$r]));
+            if (empty($recipients)) {
+                throw new Exception("No valid recipients selected.");
+            }
             if (!isset($_FILES['shared_file']) || $_FILES['shared_file']['error'] !== UPLOAD_ERR_OK) {
                 throw new Exception("Please select a valid file to upload.");
             }
