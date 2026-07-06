@@ -39,7 +39,7 @@ try {
             sd.previous_school, sd.physical_deformity, sd.awards, sd.extracurricular_expertise, 
             sd.special_care_areas, sd.fee_category, sd.class_id, sd.section_id,
             td.phone as teacher_phone, td.cnic, td.address as teacher_address,
-            GROUP_CONCAT(tca.class_id) as assigned_class_ids
+            GROUP_CONCAT(DISTINCT CONCAT(tca.class_id, '|', IFNULL(tca.section_id,0), '|', IFNULL(tca.subject_id,0))) as assigned_keys
          FROM users u
          JOIN roles r ON u.role_id = r.id
          LEFT JOIN student_details sd ON u.id = sd.user_id
@@ -70,6 +70,27 @@ try {
 
     $class_map = array_column($classes, 'class_name', 'id');
     $section_map = array_column($sections, 'section_name', 'id');
+
+    $class_structure = [];
+    $structure_rows = $pdo->query("
+        SELECT c.id AS class_id, c.class_name, sec.id AS section_id, sec.section_name,
+               s.id AS subject_id, s.subject_name
+        FROM classes c
+        JOIN sections sec ON sec.class_id = c.id
+        JOIN program_subjects ps ON ps.program_id = sec.id
+        JOIN subjects s ON s.id = ps.subject_id
+        ORDER BY c.class_name, sec.section_name, s.subject_name
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($structure_rows as $row) {
+        $cid = $row['class_id']; $sid = $row['section_id'];
+        if (!isset($class_structure[$cid])) {
+            $class_structure[$cid] = ['class_name' => $row['class_name'], 'sections' => []];
+        }
+        if (!isset($class_structure[$cid]['sections'][$sid])) {
+            $class_structure[$cid]['sections'][$sid] = ['section_name' => $row['section_name'], 'subjects' => []];
+        }
+        $class_structure[$cid]['sections'][$sid]['subjects'][] = ['subject_id' => $row['subject_id'], 'subject_name' => $row['subject_name']];
+    }
 
     $students = []; $teachers = []; $staff = [];
     foreach ($users as $user) {
@@ -248,18 +269,26 @@ try {
                         <div class="col-md-6 mb-3"><label class="form-label">CNIC</label><input type="text" class="form-control" id="teacher_cnic" name="cnic"></div>
                         
                         <div class="col-12 mb-3">
-                            <label class="form-label">Assign Classes (Optional)</label>
-                            <div class="border rounded p-2 bg-light" style="max-height: 150px; overflow-y: auto;">
-                                <?php if (empty($classes)): ?>
-                                    <span class="text-muted small">No classes found. Please add classes in the Class Management page first.</span>
-                                <?php else: ?>
-                                    <?php foreach($classes as $class): ?>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="assigned_classes[]" value="<?= $class['id'] ?>" id="class_<?= $class['id'] ?>">
-                                            <label class="form-check-label" for="class_<?= $class['id'] ?>"><?= htmlspecialchars($class['class_name']) ?></label>
-                                        </div>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
+                            <label class="form-label">Assign Class / Section / Subject (Optional)</label>
+                            <div class="border rounded p-2 bg-light" style="max-height: 250px; overflow-y: auto;">
+                                <?php if (empty($class_structure)): ?>
+                                    <span class="text-muted small">No classes/subjects found. Please add them in Class Management first.</span>
+                                <?php else: foreach ($class_structure as $cid => $cls): ?>
+                                    <div class="mb-2">
+                                        <div class="fw-bold text-primary small border-bottom pb-1 mb-1">Class <?= htmlspecialchars($cls['class_name']) ?></div>
+                                        <?php foreach ($cls['sections'] as $sid => $sec): ?>
+                                            <div class="ms-2 mb-1">
+                                                <div class="fw-semibold text-secondary" style="font-size: 0.8rem;"><?= htmlspecialchars($sec['section_name']) ?></div>
+                                                <?php foreach ($sec['subjects'] as $sub): $key = $cid . '|' . $sid . '|' . $sub['subject_id']; ?>
+                                                    <div class="form-check ms-3">
+                                                        <input class="form-check-input assignment-checkbox" type="checkbox" name="assignments[]" value="<?= htmlspecialchars($key) ?>" id="asg_<?= $cid ?>_<?= $sid ?>_<?= $sub['subject_id'] ?>">
+                                                        <label class="form-check-label" for="asg_<?= $cid ?>_<?= $sid ?>_<?= $sub['subject_id'] ?>"><?= htmlspecialchars($sub['subject_name']) ?></label>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endforeach; endif; ?>
                             </div>
                         </div>
                         
@@ -360,9 +389,9 @@ function prepareEditModal(user) {
     } else if (roleName === 'Teacher') {
         document.getElementById('teacher_phone').value = user.teacher_phone || "";
         document.getElementById('teacher_cnic').value = user.cnic || "";
-        document.querySelectorAll('input[name="assigned_classes[]"]').forEach(c => c.checked = false);
-        const assigned_ids = user.assigned_class_ids ? user.assigned_class_ids.split(',') : [];
-        assigned_ids.forEach(id => { const cb = document.querySelector(`input[name="assigned_classes[]"][value="${id}"]`); if (cb) cb.checked = true; });
+        document.querySelectorAll('.assignment-checkbox').forEach(cb => cb.checked = false);
+        const assigned_keys = user.assigned_keys ? user.assigned_keys.split(',') : [];
+        assigned_keys.forEach(key => { const cb = document.querySelector(`.assignment-checkbox[value="${key}"]`); if (cb) cb.checked = true; });
     }
     document.getElementById('userRole').dispatchEvent(new Event('change'));
 }

@@ -96,9 +96,13 @@ try {
                 $phone = $_POST['phone'] ?? ''; $cnic = $_POST['cnic'] ?? ''; $address = $_POST['address'] ?? '';
                 $pdo->prepare("INSERT INTO teacher_details (user_id, phone, cnic, address) VALUES (?, ?, ?, ?)")->execute([$new_user_id, $phone, $cnic, $address]);
                 
-                if (!empty($_POST['assigned_classes'])) {
-                    $stmt_assign = $pdo->prepare("INSERT INTO teacher_class_assignments (teacher_user_id, class_id) VALUES (?, ?)");
-                    foreach ((array)$_POST['assigned_classes'] as $cid) { $stmt_assign->execute([$new_user_id, (int)$cid]); }
+                if (!empty($_POST['assignments'])) {
+                    $stmt_assign = $pdo->prepare("INSERT INTO teacher_class_assignments (teacher_user_id, class_id, section_id, subject_id) VALUES (?, ?, ?, ?)");
+                    foreach ((array)$_POST['assignments'] as $triple) {
+                        [$cid, $sid, $subid] = array_pad(explode('|', $triple), 3, null);
+                        if (!$cid) continue;
+                        $stmt_assign->execute([$new_user_id, (int)$cid, $sid ? (int)$sid : null, $subid ? (int)$subid : null]);
+                    }
                 }
             }
 
@@ -182,10 +186,14 @@ try {
                 $phone = $_POST['phone'] ?? ''; $cnic = $_POST['cnic'] ?? ''; $address = $_POST['address'] ?? '';
                 $pdo->prepare("INSERT INTO teacher_details (user_id, phone, cnic, address) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE phone=VALUES(phone), cnic=VALUES(cnic), address=VALUES(address)")->execute([$user_id, $phone, $cnic, $address]);
                 $pdo->prepare("DELETE FROM teacher_class_assignments WHERE teacher_user_id = ?")->execute([$user_id]);
-                
-                if (!empty($_POST['assigned_classes'])) {
-                    $stmt_assign = $pdo->prepare("INSERT INTO teacher_class_assignments (teacher_user_id, class_id) VALUES (?, ?)");
-                    foreach ((array)$_POST['assigned_classes'] as $cid) { $stmt_assign->execute([$user_id, (int)$cid]); }
+
+                if (!empty($_POST['assignments'])) {
+                    $stmt_assign = $pdo->prepare("INSERT INTO teacher_class_assignments (teacher_user_id, class_id, section_id, subject_id) VALUES (?, ?, ?, ?)");
+                    foreach ((array)$_POST['assignments'] as $triple) {
+                        [$cid, $sid, $subid] = array_pad(explode('|', $triple), 3, null);
+                        if (!$cid) continue;
+                        $stmt_assign->execute([$user_id, (int)$cid, $sid ? (int)$sid : null, $subid ? (int)$subid : null]);
+                    }
                 }
             }
             
