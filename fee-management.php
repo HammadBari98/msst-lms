@@ -400,6 +400,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $installments = isset($_POST['installments']) ? max(1, intval($_POST['installments'])) : 1;
                 $installment_days = isset($_POST['installment_days']) ? max(1, intval($_POST['installment_days'])) : 15;
                 $installment_charge = isset($_POST['installment_charge']) ? floatval($_POST['installment_charge']) : 0;
+                $enable_lunch_fee = isset($_POST['enable_lunch_fee']);
+                $lunch_fee_amount = isset($_POST['lunch_fee_amount']) ? floatval($_POST['lunch_fee_amount']) : 0;
 
                 $total_fee = $tuition_amount;
                 $component_data = [['id' => $base_tuition_comp_id, 'name' => 'Base Monthly Tuition', 'amount' => $tuition_amount, 'type' => 'recurring']];
@@ -446,6 +448,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     $component_data[] = ['id' => $lf_comp_id, 'name' => 'Previous Arrears & Late Fee (' . $true_overdue_count . ' month(s))', 'amount' => $total_arrears, 'type' => 'recurring'];
+                }
+
+                if ($enable_lunch_fee && $lunch_fee_amount > 0) {
+                    $stmt_lunch = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Lunch Fee' LIMIT 1");
+                    $stmt_lunch->execute();
+                    $lunch_comp_id = $stmt_lunch->fetchColumn();
+                    if (!$lunch_comp_id) {
+                        $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Lunch Fee', 0, 'recurring', 'Custom per-student lunch charge, entered at slip generation time', 1, 1)");
+                        $lunch_comp_id = $pdo->lastInsertId();
+                    }
+                    $total_fee += $lunch_fee_amount;
+                    $component_data[] = ['id' => $lunch_comp_id, 'name' => 'Lunch Fee', 'amount' => $lunch_fee_amount, 'type' => 'recurring'];
                 }
 
                 $installment_amount = $total_fee / $installments;
@@ -891,11 +905,15 @@ $fee_categories_json = json_encode(array_values($fee_categories));
                     </div>
                     <div class="row g-2 mb-3"><div class="col-md-12"><label class="form-label small fw-bold">Target Month</label><input type="month" class="form-control" name="target_month" value="<?= date('Y-m') ?>" required></div>
                         <div class="col-md-12 mt-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="enableClassInstallments"><label class="form-check-label fw-bold small text-primary" for="enableClassInstallments">Enable Installment Plan</label></div></div>
+                        <div class="col-md-12 mt-3"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="enableClassLunchFee" name="enable_lunch_fee"><label class="form-check-label fw-bold small text-warning" for="enableClassLunchFee">Enable Lunch Fee (same amount for every student in this class)</label></div></div>
                     </div>
                     <div class="row g-2 mb-3 installment-fields-class" style="display: none;">
                         <div class="col-md-4"><label class="form-label small fw-bold">Installments</label><input type="number" class="form-control" name="installments" id="classInstallments" value="1" min="1" max="4"></div>
                         <div class="col-md-4"><label class="form-label small fw-bold">Days Between</label><input type="number" class="form-control" name="installment_days" value="15" min="1"></div>
                         <div class="col-md-4"><label class="form-label small fw-bold">Extra Charge</label><input type="number" class="form-control" name="installment_charge" value="0" min="0" step="0.01"></div>
+                    </div>
+                    <div class="row g-2 mb-3 lunch-fee-fields-class" style="display: none;">
+                        <div class="col-md-12"><label class="form-label small fw-bold text-warning">Lunch Amount (per student)</label><input type="number" class="form-control" name="lunch_fee_amount" id="classLunchFeeAmount" value="0" min="0" step="0.01"></div>
                     </div>
                 </div>
                 <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Generate for Class</button></div>
@@ -1532,6 +1550,9 @@ $('#enableSingleLunchFee').on('change', function() {
 });
 $('#enableClassInstallments').on('change', function() {
     if ($(this).is(':checked')) { $('.installment-fields-class').slideDown(); $('#classInstallments').val(1); const c = activeComponents.find(x => x.name.toLowerCase().includes('installment charge')); if(c) $('#generateClassSlipsModal input[name="installment_charge"]').val(parseFloat(c.amount).toFixed(2)); } else { $('.installment-fields-class').slideUp(); $('#classInstallments').val(1); }
+});
+$('#enableClassLunchFee').on('change', function() {
+    if ($(this).is(':checked')) { $('.lunch-fee-fields-class').slideDown(); } else { $('.lunch-fee-fields-class').slideUp(); $('#classLunchFeeAmount').val(0); }
 });
 $('#singleInstallments, input[name="installment_charge"], #multiMonthsInput, #enableMultiMonth, #enableSingleLunchFee, #singleLunchFeeAmount').on('change keyup', () => { if (selectedStudent) calculateFeeForStudent(selectedStudent); });
 
