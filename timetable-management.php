@@ -66,18 +66,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $is_break = isset($_POST['is_break']) ? 1 : 0;
             $label = trim($_POST['label']);
 
+            $pdo->beginTransaction();
             if ($id !== '') {
                 $pdo->prepare("UPDATE timetable_periods SET period_number=?, start_time=?, end_time=?, is_break=?, label=? WHERE id=?")
                     ->execute([$period_number, $start_time, $end_time, $is_break, $label, (int)$id]);
+                if ($is_break) {
+                    $pdo->prepare("DELETE FROM timetable_entries WHERE period_id = ?")->execute([(int)$id]);
+                }
             } else {
                 $pdo->prepare("INSERT INTO timetable_periods (period_number, start_time, end_time, is_break, label) VALUES (?, ?, ?, ?, ?)")
                     ->execute([$period_number, $start_time, $end_time, $is_break, $label]);
             }
+            $pdo->commit();
             echo json_encode(['success' => true]); exit;
         }
         if ($_POST['action'] === 'delete_period') {
+            $pdo->beginTransaction();
             $pdo->prepare("DELETE FROM timetable_periods WHERE id = ?")->execute([(int)$_POST['period_id']]);
             $pdo->prepare("DELETE FROM timetable_entries WHERE period_id = ?")->execute([(int)$_POST['period_id']]);
+            $pdo->commit();
             echo json_encode(['success' => true]); exit;
         }
         if ($_POST['action'] === 'toggle_day') {
@@ -93,6 +100,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $subject_id = (int)$_POST['subject_id'];
             $teacher_user_id = (int)$_POST['teacher_user_id'];
             $room = trim($_POST['room'] ?? '') ?: null;
+
+            $stmt_valid_day = $pdo->prepare("SELECT COUNT(*) FROM school_days WHERE day_name = ? AND is_active = 1");
+            $stmt_valid_day->execute([$day_name]);
+            if (!$stmt_valid_day->fetchColumn()) {
+                echo json_encode(['success' => false, 'message' => 'Invalid or inactive school day.']); exit;
+            }
 
             $pdo->beginTransaction();
             $del = $pdo->prepare("DELETE FROM timetable_entries WHERE class_id = ? AND IFNULL(section_id,0) = IFNULL(?,0) AND day_name = ? AND period_id = ?");
@@ -113,7 +126,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt_conflict->execute([$teacher_user_id, $day_name, $period_id, $class_id, $section_id]);
             $conflict_row = $stmt_conflict->fetch(PDO::FETCH_ASSOC);
             if ($conflict_row) {
-                $conflict = "This teacher is already teaching Class {$conflict_row['class_name']}" .
+                $conflict_class_label = stripos($conflict_row['class_name'], 'class') === 0
+                    ? $conflict_row['class_name']
+                    : "Class {$conflict_row['class_name']}";
+                $conflict = "This teacher is already teaching {$conflict_class_label}" .
                     ($conflict_row['section_name'] ? " ({$conflict_row['section_name']})" : "") .
                     " at this same day and period.";
             }
