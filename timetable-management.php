@@ -10,6 +10,32 @@ if (!isset($_SESSION['admin_logged_in'])) {
 $admin_name = $_SESSION['admin_name'] ?? 'Admin';
 
 // =======================================================
+// AUTO-PATCHER: teacher_class_assignments schema drift
+// =======================================================
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS teacher_class_assignments (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            teacher_user_id INT NOT NULL,
+            class_id INT NOT NULL,
+            section_id INT DEFAULT NULL,
+            subject_id INT DEFAULT NULL,
+            program_name VARCHAR(100) DEFAULT 'General'
+        )
+    ");
+    $existing_cols = $pdo->query("SHOW COLUMNS FROM teacher_class_assignments")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('section_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE teacher_class_assignments ADD COLUMN section_id INT DEFAULT NULL AFTER class_id");
+    }
+    if (!in_array('subject_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE teacher_class_assignments ADD COLUMN subject_id INT DEFAULT NULL AFTER section_id");
+    }
+    if (!in_array('program_name', $existing_cols)) {
+        $pdo->exec("ALTER TABLE teacher_class_assignments ADD COLUMN program_name VARCHAR(100) DEFAULT 'General'");
+    }
+} catch (PDOException $e) { /* Ignore if already up to date */ }
+
+// =======================================================
 // AUTO-PATCHER: Timetable tables
 // =======================================================
 try {
