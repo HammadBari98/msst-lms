@@ -15,8 +15,8 @@ if (!empty($_SESSION['student_id'])) {
     $stmt->execute([$_SESSION['student_id']]);
     $current_user_db_id = $stmt->fetchColumn();
 }
-if (!$current_user_db_id && isset($_SESSION['user_db_id'])) {
-    $current_user_db_id = (int)$_SESSION['user_db_id'];
+if (!$current_user_db_id && isset($_SESSION['student_user_db_id'])) {
+    $current_user_db_id = (int)$_SESSION['student_user_db_id'];
 }
 
 $student_class_id = 0;

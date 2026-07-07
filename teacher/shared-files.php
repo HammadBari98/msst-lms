@@ -2,14 +2,14 @@
 session_start();
 require_once __DIR__ . '/../config/db_config.php';
 
-if (!isset($_SESSION['teacher_logged_in']) || !isset($_SESSION['user_db_id'])) {
+if (!isset($_SESSION['teacher_logged_in']) || !isset($_SESSION['teacher_user_db_id'])) {
     header('Location: login.php');
     exit;
 }
 
 $teacher_name = $_SESSION['teacher_name'] ?? 'Teacher';
 $current_type = 'user';
-$current_ref_id = (int)$_SESSION['user_db_id'];
+$current_ref_id = (int)$_SESSION['teacher_user_db_id'];
 
 // =======================================================
 // AUTO-PATCHER: Shared Files tables

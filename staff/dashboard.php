@@ -2,13 +2,13 @@
 session_start();
 require_once __DIR__ . '/../config/db_config.php';
 
-if (!isset($_SESSION['staff_logged_in']) || !isset($_SESSION['user_db_id'])) {
+if (!isset($_SESSION['staff_logged_in']) || !isset($_SESSION['staff_user_db_id'])) {
     header('Location: login.php');
     exit();
 }
 
 $staff_name = $_SESSION['staff_name'] ?? 'Staff';
-$current_user_db_id = (int)$_SESSION['user_db_id'];
+$current_user_db_id = (int)$_SESSION['staff_user_db_id'];
 
 $received_count = 0;
 try {

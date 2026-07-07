@@ -13,7 +13,7 @@ $student_name = $_SESSION['student_name'] ?? 'Student';
 // =======================================================
 // 1. ROBUST STUDENT ID TRANSLATOR
 // =======================================================
-$raw_session_id = $_SESSION['user_db_id'] ?? $_SESSION['user_id'] ?? $_SESSION['student_id'] ?? $_SESSION['id'] ?? null;
+$raw_session_id = $_SESSION['student_user_db_id'] ?? $_SESSION['user_id'] ?? $_SESSION['student_id'] ?? $_SESSION['id'] ?? null;
 $current_user_db_id = 0;
 
 if ($raw_session_id) {
@@ -168,11 +168,7 @@ function getSubjectIconAndColor($subjectName) {
                                             </div>
                                         </div>
                                         <h5 class="card-title fw-bold text-dark mb-1"><?= htmlspecialchars($sub['subject_name']) ?></h5>
-                                        <p class="text-muted small mb-4">Core Subject &bull; <?= htmlspecialchars($class_name) ?></p>
-                                        
-                                        <a href="#" class="btn btn-light border w-100 fw-bold text-primary mt-auto" style="transition: 0.2s;" onmouseover="this.classList.add('bg-primary', 'text-white')" onmouseout="this.classList.remove('bg-primary', 'text-white')">
-                                            View Details <i class="fas fa-arrow-right ms-1"></i>
-                                        </a>
+                                        <p class="text-muted small mb-0">Core Subject &bull; <?= htmlspecialchars($class_name) ?></p>
                                     </div>
                                 </div>
                             </div>

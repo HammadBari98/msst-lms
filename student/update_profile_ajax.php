@@ -6,12 +6,12 @@ require_once __DIR__ . '/../config/db_config.php';
 header('Content-Type: application/json');
 
 // Check if the user is logged in
-if (!isset($_SESSION['student_logged_in']) || !isset($_SESSION['user_db_id'])) {
+if (!isset($_SESSION['student_logged_in']) || !isset($_SESSION['student_user_db_id'])) {
     echo json_encode(['success' => false, 'message' => 'Authentication error. Please log in again.']);
     exit();
 }
 
-$user_db_id = $_SESSION['user_db_id']; // The primary key (e.g., 1, 2, 3) of the user
+$user_db_id = $_SESSION['student_user_db_id']; // The primary key (e.g., 1, 2, 3) of the user
 $response = ['success' => false, 'message' => 'An unknown error occurred.'];
 
 try {

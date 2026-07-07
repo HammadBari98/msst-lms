@@ -40,6 +40,7 @@
             color: white;
             transition: all 0.3s;
             z-index: 1000;
+            overflow-y: auto;
         }
 
         .sidebar.collapsed {

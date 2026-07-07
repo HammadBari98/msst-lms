@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             } else {
                 // Login successful - Set the correct session variables
                 $_SESSION['teacher_logged_in'] = true;
-                $_SESSION['user_db_id'] = $user['id']; // The actual database primary key (e.g., 5)
+                $_SESSION['teacher_user_db_id'] = $user['id']; // The actual database primary key (e.g., 5)
                 $_SESSION['teacher_id'] = $user['user_id_string']; // The 'TEA-12345' ID
                 $_SESSION['teacher_name'] = $user['full_name'];
                 $_SESSION['role'] = $user['role_name'];

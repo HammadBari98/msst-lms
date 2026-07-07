@@ -3,7 +3,7 @@ session_start();
 require_once __DIR__ . '/../config/db_config.php';
 
 // Standard login check for teachers
-if (!isset($_SESSION['teacher_logged_in']) || !isset($_SESSION['user_db_id'])) {
+if (!isset($_SESSION['teacher_logged_in']) || !isset($_SESSION['teacher_user_db_id'])) {
     header('Location: login.php');
     exit();
 }
@@ -15,7 +15,7 @@ $assigned_classes = [];
 $page_error = '';
 
 try {
-    $current_user_db_id = $_SESSION['user_db_id'];
+    $current_user_db_id = $_SESSION['teacher_user_db_id'];
 
     // Query 1: Get all personal and professional details by joining users and teacher_details
     $sql_teacher = "SELECT 

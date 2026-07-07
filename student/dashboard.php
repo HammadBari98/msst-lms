@@ -46,6 +46,23 @@ try {
     $class_id = $student_details['class_id'] ?? 0;
     $program_id = $student_details['section_id'] ?? 0;
 
+    $class_label = '';
+    if ($class_id) {
+        $stmt_cls = $pdo->prepare("
+            SELECT c.class_name, sec.section_name
+            FROM classes c
+            LEFT JOIN sections sec ON sec.id = ?
+            WHERE c.id = ?
+        ");
+        $stmt_cls->execute([$program_id, $class_id]);
+        $cls_row = $stmt_cls->fetch(PDO::FETCH_ASSOC);
+        if ($cls_row) {
+            $class_name = $cls_row['class_name'];
+            $prefix = stripos($class_name, 'class') === 0 ? '' : 'Class ';
+            $class_label = $prefix . $class_name . ($cls_row['section_name'] ? ' (' . $cls_row['section_name'] . ')' : '');
+        }
+    }
+
     // B. Count Enrolled Subjects (From new dynamic mappings)
     $stmt_subs = $pdo->prepare("SELECT COUNT(*) FROM program_subjects WHERE program_id = ?");
     $stmt_subs->execute([$program_id]);
@@ -205,7 +222,10 @@ try {
 
                 <div class="welcome-message">
                     <h1 class="h2 font-weight-bold mb-1">Welcome Back, <?= htmlspecialchars($student_name) ?>!</h1>
-                    <p class="lead mb-0"><i class="fas fa-graduation-cap me-2"></i> Here's a quick look at your academic progress.</p>
+                    <p class="lead mb-0"><i class="fas fa-graduation-cap me-2"></i>
+                        <?php if ($class_label): ?><?= htmlspecialchars($class_label) ?> &middot; <?php endif; ?>
+                        Here's a quick look at your academic progress.
+                    </p>
                 </div>
 
                 <h2 class="h4 mb-4 text-gray-800"><i class="fas fa-chart-pie me-2 text-primary"></i> Quick Stats</h2>

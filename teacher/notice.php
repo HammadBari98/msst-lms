@@ -13,7 +13,7 @@ $teacher_name = $_SESSION['teacher_name'] ?? 'Teacher';
 // =======================================================
 // 1. ROBUST TEACHER ID FETCH
 // =======================================================
-$raw_session_id = $_SESSION['user_db_id'] ?? $_SESSION['user_id'] ?? $_SESSION['teacher_id'] ?? $_SESSION['id'] ?? null;
+$raw_session_id = $_SESSION['teacher_user_db_id'] ?? $_SESSION['user_id'] ?? $_SESSION['teacher_id'] ?? $_SESSION['id'] ?? null;
 $current_user_db_id = 0;
 
 if ($raw_session_id) {

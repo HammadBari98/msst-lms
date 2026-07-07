@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             } else {
                 // Login successful
                 $_SESSION['student_logged_in'] = true;
-                $_SESSION['user_db_id'] = $user['id']; // The actual database primary key
+                $_SESSION['student_user_db_id'] = $user['id']; // The actual database primary key
                 $_SESSION['student_id'] = $user['user_id_string']; // The 'STU-101' ID
                 $_SESSION['student_name'] = $user['full_name'];
                 $_SESSION['role'] = $user['role_name'];

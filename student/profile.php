@@ -15,7 +15,7 @@ $page_error = '';
 // =======================================================
 // 1. ROBUST STUDENT ID TRANSLATOR (The Core Fix)
 // =======================================================
-$raw_session_id = $_SESSION['user_db_id'] ?? $_SESSION['user_id'] ?? $_SESSION['student_id'] ?? $_SESSION['id'] ?? null;
+$raw_session_id = $_SESSION['student_user_db_id'] ?? $_SESSION['user_id'] ?? $_SESSION['student_id'] ?? $_SESSION['id'] ?? null;
 $current_user_db_id = 0;
 
 if ($raw_session_id) {

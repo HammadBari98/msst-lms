@@ -2,13 +2,13 @@
 session_start();
 require_once __DIR__ . '/../config/db_config.php';
 
-if (!isset($_SESSION['teacher_logged_in']) || !isset($_SESSION['user_db_id'])) {
+if (!isset($_SESSION['teacher_logged_in']) || !isset($_SESSION['teacher_user_db_id'])) {
     http_response_code(403);
     exit('Access denied.');
 }
 
 $current_type = 'user';
-$current_ref_id = (int)$_SESSION['user_db_id'];
+$current_ref_id = (int)$_SESSION['teacher_user_db_id'];
 
 $file_id = (int)($_GET['file_id'] ?? 0);
 $stmt = $pdo->prepare("SELECT file_name, file_path, sender_type, sender_ref_id FROM shared_files WHERE id = ?");
