@@ -40,6 +40,15 @@ try {
     if (!$col_check) {
         $pdo->exec("ALTER TABLE student_attendance ADD COLUMN section_id INT DEFAULT NULL AFTER class_id");
     }
+    // Backfill legacy rows recorded before section-level tracking existed, using each
+    // student's current section, so old attendance still matches the section-scoped
+    // register/report queries instead of silently disappearing.
+    $pdo->exec("
+        UPDATE student_attendance sa
+        JOIN student_details sd ON sd.user_id = sa.student_id
+        SET sa.section_id = sd.section_id
+        WHERE sa.section_id IS NULL AND sd.section_id IS NOT NULL
+    ");
 } catch (PDOException $e) {
     die("Database Error: " . $e->getMessage());
 }
