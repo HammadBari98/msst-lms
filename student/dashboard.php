@@ -11,6 +11,19 @@ $student_name = $_SESSION['student_name'] ?? 'Student';
 $is_admin = $_SESSION['is_admin'] ?? false;
 
 // =======================================================
+// AUTO-PATCHER: assessments schema drift (section_id/subject_id)
+// =======================================================
+try {
+    $existing_cols = $pdo->query("SHOW COLUMNS FROM assessments")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('section_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE assessments ADD COLUMN section_id INT DEFAULT 0 AFTER class_id");
+    }
+    if (!in_array('subject_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE assessments ADD COLUMN subject_id INT DEFAULT 0 AFTER section_id");
+    }
+} catch (PDOException $e) { /* Ignore if already up to date */ }
+
+// =======================================================
 // 1. ROBUST STUDENT ID TRANSLATOR (The Core Fix)
 // =======================================================
 $raw_session_id = $_SESSION['user_id'] ?? $_SESSION['student_id'] ?? $_SESSION['id'] ?? null;

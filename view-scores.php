@@ -9,6 +9,19 @@ if (!isset($_SESSION['admin_logged_in'])) {
 
 $admin_name = $_SESSION['admin_name'] ?? 'Admin';
 
+// =======================================================
+// AUTO-PATCHER: assessments schema drift (section_id/subject_id)
+// =======================================================
+try {
+    $existing_cols = $pdo->query("SHOW COLUMNS FROM assessments")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('section_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE assessments ADD COLUMN section_id INT DEFAULT 0 AFTER class_id");
+    }
+    if (!in_array('subject_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE assessments ADD COLUMN subject_id INT DEFAULT 0 AFTER section_id");
+    }
+} catch (PDOException $e) { /* Ignore if already up to date */ }
+
 // Fetch ALL assessments for the Admin view
 $stmt = $pdo->query("
     SELECT a.*, c.class_name, u.full_name as teacher_name,

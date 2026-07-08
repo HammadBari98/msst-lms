@@ -8,6 +8,19 @@ if (!isset($_SESSION['teacher_logged_in']) || !isset($_POST['assessment_id'])) {
 
 $assessment_id = $_POST['assessment_id'];
 
+// =======================================================
+// AUTO-PATCHER: assessments schema drift (section_id/subject_id)
+// =======================================================
+try {
+    $existing_cols = $pdo->query("SHOW COLUMNS FROM assessments")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('section_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE assessments ADD COLUMN section_id INT DEFAULT 0 AFTER class_id");
+    }
+    if (!in_array('subject_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE assessments ADD COLUMN subject_id INT DEFAULT 0 AFTER section_id");
+    }
+} catch (PDOException $e) { /* Ignore if already up to date */ }
+
 $stmt_asm = $pdo->prepare("SELECT class_id, section_id FROM assessments WHERE id = ?");
 $stmt_asm->execute([$assessment_id]);
 $assessment = $stmt_asm->fetch(PDO::FETCH_ASSOC);

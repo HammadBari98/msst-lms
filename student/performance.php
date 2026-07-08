@@ -9,6 +9,19 @@ if (!isset($_SESSION['student_logged_in'])) {
 
 $student_name = $_SESSION['student_name'] ?? 'Student';
 
+// =======================================================
+// AUTO-PATCHER: assessments schema drift (section_id/subject_id)
+// =======================================================
+try {
+    $existing_cols = $pdo->query("SHOW COLUMNS FROM assessments")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('section_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE assessments ADD COLUMN section_id INT DEFAULT 0 AFTER class_id");
+    }
+    if (!in_array('subject_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE assessments ADD COLUMN subject_id INT DEFAULT 0 AFTER section_id");
+    }
+} catch (PDOException $e) { /* Ignore if already up to date */ }
+
 // --- Safe Student ID Translator ---
 $current_user_db_id = 0;
 if (!empty($_SESSION['student_id'])) {
