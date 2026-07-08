@@ -87,8 +87,8 @@ $structure_rows = $pdo->query("
            s.id AS subject_id, s.subject_name
     FROM classes c
     JOIN sections sec ON sec.class_id = c.id
-    JOIN program_subjects ps ON ps.program_id = sec.id
-    JOIN subjects s ON s.id = ps.subject_id
+    LEFT JOIN program_subjects ps ON ps.program_id = sec.id
+    LEFT JOIN subjects s ON s.id = ps.subject_id
     ORDER BY c.class_name, sec.section_name, s.subject_name
 ")->fetchAll(PDO::FETCH_ASSOC);
 foreach ($structure_rows as $row) {
@@ -99,7 +99,9 @@ foreach ($structure_rows as $row) {
     if (!isset($class_structure[$cid]['sections'][$sid])) {
         $class_structure[$cid]['sections'][$sid] = ['section_name' => $row['section_name'], 'subjects' => []];
     }
-    $class_structure[$cid]['sections'][$sid]['subjects'][] = ['subject_id' => $row['subject_id'], 'subject_name' => $row['subject_name']];
+    if ($row['subject_id']) {
+        $class_structure[$cid]['sections'][$sid]['subjects'][] = ['subject_id' => $row['subject_id'], 'subject_name' => $row['subject_name']];
+    }
 }
 
 // Fetch all teachers and their currently assigned class/section/subject triples
@@ -253,12 +255,17 @@ $teachers = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <?php foreach ($cls['sections'] as $sid => $sec): ?>
                                         <div class="ms-2 mb-2">
                                             <div class="fw-semibold text-secondary small mb-1"><?= htmlspecialchars($sec['section_name']) ?></div>
-                                            <?php foreach ($sec['subjects'] as $sub): $key = $cid . '|' . $sid . '|' . $sub['subject_id']; ?>
+                                            <?php if (empty($sec['subjects'])): $key = $cid . '|' . $sid . '|'; ?>
+                                                <div class="form-check ms-3">
+                                                    <input class="form-check-input assignment-checkbox" type="checkbox" name="assignments[]" value="<?= htmlspecialchars($key) ?>" id="asg_<?= $cid ?>_<?= $sid ?>_none">
+                                                    <label class="form-check-label" for="asg_<?= $cid ?>_<?= $sid ?>_none">Whole Section <span class="text-muted">(no subjects configured yet in Class Management)</span></label>
+                                                </div>
+                                            <?php else: foreach ($sec['subjects'] as $sub): $key = $cid . '|' . $sid . '|' . $sub['subject_id']; ?>
                                                 <div class="form-check ms-3">
                                                     <input class="form-check-input assignment-checkbox" type="checkbox" name="assignments[]" value="<?= htmlspecialchars($key) ?>" id="asg_<?= $cid ?>_<?= $sid ?>_<?= $sub['subject_id'] ?>">
                                                     <label class="form-check-label" for="asg_<?= $cid ?>_<?= $sid ?>_<?= $sub['subject_id'] ?>"><?= htmlspecialchars($sub['subject_name']) ?></label>
                                                 </div>
-                                            <?php endforeach; ?>
+                                            <?php endforeach; endif; ?>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
