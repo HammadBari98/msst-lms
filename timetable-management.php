@@ -35,10 +35,20 @@ try {
     }
     // Drop the legacy (teacher_user_id, class_id)-only unique key from before
     // section/subject granularity existed - it blocks multiple sections/subjects
-    // for the same teacher+class with a duplicate-entry error.
+    // for the same teacher+class with a duplicate-entry error. teacher_user_id
+    // carries a foreign key, so MySQL refuses to drop the only index covering
+    // it - the new key must exist first to keep the FK satisfied.
     $existing_indexes = $pdo->query("SHOW INDEX FROM teacher_class_assignments")->fetchAll(PDO::FETCH_COLUMN, 2);
+    if (!in_array('unique_teacher_assignment', $existing_indexes)) {
+        try {
+            $pdo->exec("ALTER TABLE teacher_class_assignments ADD UNIQUE KEY unique_teacher_assignment (teacher_user_id, class_id, section_id, subject_id)");
+        } catch (PDOException $e) {
+            // Existing duplicate rows under the new key shape; a plain index still satisfies the FK
+            try { $pdo->exec("ALTER TABLE teacher_class_assignments ADD INDEX idx_teacher_user_id (teacher_user_id)"); } catch (PDOException $e2) {}
+        }
+    }
     if (in_array('teacher_class_unique', $existing_indexes)) {
-        $pdo->exec("ALTER TABLE teacher_class_assignments DROP INDEX teacher_class_unique");
+        try { $pdo->exec("ALTER TABLE teacher_class_assignments DROP INDEX teacher_class_unique"); } catch (PDOException $e) {}
     }
 } catch (PDOException $e) { /* Ignore if already up to date */ }
 
