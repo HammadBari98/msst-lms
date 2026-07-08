@@ -388,8 +388,8 @@ if ($is_combined || $selected_class) {
         if ($('#reportTable').length > 0) {
             $('#reportTable').DataTable({
                 "pageLength": 15,
-                "lengthMenu": [10, 15, 25, 50, 100],
-                "ordering": false, 
+                "lengthMenu": [[10, 15, 25, 50, 100, -1], [10, 15, 25, 50, 100, "All"]],
+                "ordering": false,
                 "language": { "search": "Search Student:" }
             });
         }
