@@ -149,7 +149,8 @@ function getGeneratedFeeSlips($pdo) {
         ");
        $stmt = $pdo->prepare("
             SELECT fs.*, u.full_name, u.user_id_string, c.class_name, s.section_name, sd.fee_category, sd.father_name, sd.cell_no,
-                   (SELECT component_name FROM fee_slip_components fsc WHERE fsc.slip_no = fs.slip_no AND fsc.component_name LIKE 'Base Monthly Tuition%' LIMIT 1) as base_tuition_name
+                   (SELECT component_name FROM fee_slip_components fsc WHERE fsc.slip_no = fs.slip_no AND fsc.component_name LIKE 'Base Monthly Tuition%' LIMIT 1) as base_tuition_name,
+                   (SELECT amount FROM fee_slip_components fsc WHERE fsc.slip_no = fs.slip_no AND fsc.component_name = 'Lunch Fee' LIMIT 1) as lunch_fee_amount
             FROM fee_slips fs
             LEFT JOIN users u ON fs.student_id = u.id
             LEFT JOIN student_details sd ON u.id = sd.user_id
@@ -621,6 +622,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: ' . $_SERVER['PHP_SELF']); exit;
     }
+    // ==========================================
+    // 10. EDIT LUNCH FEE (add/update/remove on an already-generated slip)
+    // ==========================================
+    if (isset($_POST['edit_lunch_fee_action'])) {
+        try {
+            $pdo->beginTransaction();
+            $slip_no = $_POST['slip_no'];
+            $lunch_amount = max(0, floatval($_POST['lunch_fee_amount']));
+
+            $stmt_existing = $pdo->prepare("SELECT id FROM fee_slip_components WHERE slip_no = ? AND component_name = 'Lunch Fee'");
+            $stmt_existing->execute([$slip_no]);
+            $existing_id = $stmt_existing->fetchColumn();
+
+            if ($lunch_amount > 0) {
+                $stmt_lunch = $pdo->prepare("SELECT id FROM fee_components WHERE name = 'Lunch Fee' LIMIT 1");
+                $stmt_lunch->execute();
+                $lunch_comp_id = $stmt_lunch->fetchColumn();
+                if (!$lunch_comp_id) {
+                    $pdo->exec("INSERT INTO fee_components (name, amount, type, description, is_optional, is_active) VALUES ('Lunch Fee', 0, 'recurring', 'Custom per-student lunch charge, entered at slip generation time', 1, 1)");
+                    $lunch_comp_id = $pdo->lastInsertId();
+                }
+                if ($existing_id) {
+                    $pdo->prepare("UPDATE fee_slip_components SET amount = ? WHERE id = ?")->execute([$lunch_amount, $existing_id]);
+                } else {
+                    $pdo->prepare("INSERT INTO fee_slip_components (slip_no, component_id, component_name, amount, component_type) VALUES (?, ?, 'Lunch Fee', ?, 'recurring')")->execute([$slip_no, $lunch_comp_id, $lunch_amount]);
+                }
+            } elseif ($existing_id) {
+                $pdo->prepare("DELETE FROM fee_slip_components WHERE id = ?")->execute([$existing_id]);
+            }
+
+            $pdo->prepare("UPDATE fee_slips fs SET amount = (SELECT COALESCE(SUM(amount), 0) FROM fee_slip_components WHERE slip_no = fs.slip_no) WHERE slip_no = ?")->execute([$slip_no]);
+
+            $pdo->commit();
+            $_SESSION['action_msg'] = '<div class="alert alert-success alert-dismissible"><i class="fas fa-check-circle me-2"></i>Lunch fee updated!</div>';
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible"><i class="fas fa-times-circle me-2"></i>Error: ' . $e->getMessage() . '</div>';
+        }
+        header('Location: ' . $_SERVER['PHP_SELF']); exit;
+    }
 }
 
 
@@ -788,6 +829,7 @@ $fee_categories_json = json_encode(array_values($fee_categories));
                                                     <?php if ($record['status'] != 'Paid'): ?>
                                                     <li><a class="dropdown-item py-2" href="#" onclick="preparePayment('<?= htmlspecialchars($record['slip_no']) ?>', '<?= htmlspecialchars($record['full_name'], ENT_QUOTES) ?>', <?= $record['amount'] ?>)"><i class="fas fa-cash-register text-success me-2"></i> Record Payment</a></li>
                                                     <li><a class="dropdown-item py-2" href="#" onclick="applyScholarshipModal('<?= htmlspecialchars($record['slip_no']) ?>', '<?= htmlspecialchars($record['full_name'], ENT_QUOTES) ?>', '<?= $current_scholarship ?>')"><i class="fas fa-percent text-warning me-2"></i> Apply Scholarship</a></li>
+                                                    <li><a class="dropdown-item py-2" href="#" onclick="editLunchFeeModal('<?= htmlspecialchars($record['slip_no']) ?>', '<?= htmlspecialchars($record['full_name'], ENT_QUOTES) ?>', '<?= (float)($record['lunch_fee_amount'] ?? 0) ?>')"><i class="fas fa-utensils text-warning me-2"></i> Edit Lunch Fee</a></li>
                                                     <li><a class="dropdown-item py-2" href="#" onclick="editDatesModal('<?= htmlspecialchars($record['slip_no']) ?>', '<?= htmlspecialchars($record['full_name'], ENT_QUOTES) ?>', '<?= date('Y-m-d', strtotime($record['generated_date'])) ?>', '<?= $record['due_date'] ?>')"><i class="fas fa-calendar-alt text-primary me-2"></i> Edit Dates</a></li>
                                                     <?php endif; ?>
                                                     <li><hr class="dropdown-divider"></li>
@@ -996,6 +1038,32 @@ $fee_categories_json = json_encode(array_values($fee_categories));
                 <div class="modal-footer border-top bg-white">
                     <button type="button" class="btn btn-secondary w-100 mb-2" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary w-100 fw-bold shadow-sm">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="editLunchFeeModal" tabindex="-1" style="z-index: 1060;">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning border-0 py-3">
+                <h5 class="modal-title fw-bold"><i class="fas fa-utensils me-2"></i>Edit Lunch Fee</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="edit_lunch_fee_action" value="1">
+                <input type="hidden" id="editLunchFeeSlipNo" name="slip_no">
+                <div class="modal-body bg-light p-4 text-center">
+                    <p class="text-muted small mb-3">Student: <strong id="editLunchFeeStudentName" class="text-dark"></strong></p>
+                    <div class="mb-1 text-start">
+                        <label class="form-label text-muted small fw-bold">Lunch Amount (PKR)</label>
+                        <input type="number" class="form-control fw-bold border-warning" name="lunch_fee_amount" id="editLunchFeeAmount" min="0" step="0.01" required>
+                        <small class="text-muted">Set to 0 to remove the lunch fee from this slip.</small>
+                    </div>
+                </div>
+                <div class="modal-footer border-top bg-white">
+                    <button type="button" class="btn btn-secondary w-100 mb-2" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning w-100 fw-bold shadow-sm">Save Changes</button>
                 </div>
             </form>
         </div>
@@ -1562,6 +1630,13 @@ function editDatesModal(slipNo, studentName, issueDate, dueDate) {
     document.getElementById('editIssueDate').value = issueDate;
     document.getElementById('editDueDate').value = dueDate;
     new bootstrap.Modal(document.getElementById('editDatesModal')).show();
+}
+
+function editLunchFeeModal(slipNo, studentName, currentAmount) {
+    document.getElementById('editLunchFeeSlipNo').value = slipNo;
+    document.getElementById('editLunchFeeStudentName').textContent = studentName;
+    document.getElementById('editLunchFeeAmount').value = currentAmount;
+    new bootstrap.Modal(document.getElementById('editLunchFeeModal')).show();
 }
 </script>
 </body>
