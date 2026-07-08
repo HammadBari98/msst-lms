@@ -440,9 +440,9 @@ if ($is_combined || $selected_class) {
             body { font-family: Arial, sans-serif; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             h2 { text-align: center; font-size: 22px; margin-bottom: 5px; }
             h4 { text-align: center; font-size: 16px; margin-bottom: 20px; color: #555; }
-            table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 8px; margin-bottom: 20px; }
-            th, td { border: 1px solid #000; padding: 2px; text-align: center; overflow: hidden; word-wrap: break-word; }
-            th.text-start, td.text-start { text-align: left; }
+            table { width: 100%; table-layout: auto; border-collapse: collapse; font-size: 8px; margin-bottom: 20px; }
+            th, td { width: auto !important; min-width: 0 !important; border: 1px solid #000; padding: 2px; text-align: center; overflow: hidden; word-wrap: break-word; white-space: nowrap; }
+            th.text-start, td.text-start { text-align: left; white-space: normal; }
             .att-P { background-color: #e8f5e9 !important; color: #198754 !important; font-weight: bold; }
             .att-A { background-color: #f8d7da !important; color: #dc3545 !important; font-weight: bold; }
             .att-L { background-color: #fff3cd !important; color: #856404 !important; font-weight: bold; }
