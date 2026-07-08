@@ -25,6 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $class_id = $_POST['edit_class_id'];
     $section_id = $_POST['edit_section_id'] !== '' ? (int)$_POST['edit_section_id'] : null;
     $admin_id = $_SESSION['user_id'] ?? 0;
+    $return_class_section = $_POST['return_class_section'] !== '' ? $_POST['return_class_section'] : ($class_id . '|' . $section_id);
 
     try {
         $stmt = $pdo->prepare("
@@ -37,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     } catch (Exception $e) {
         $_SESSION['action_msg'] = '<div class="alert alert-danger alert-dismissible shadow-sm"><i class="fas fa-times-circle me-2"></i>Error: ' . $e->getMessage() . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
     }
-    header("Location: attendance-report.php?class_section=" . urlencode($class_id . '|' . $section_id) . "&month=" . substr($att_date, 0, 7));
+    header("Location: attendance-report.php?class_section=" . urlencode($return_class_section) . "&month=" . substr($att_date, 0, 7));
     exit;
 }
 
@@ -53,8 +54,13 @@ try {
 } catch (Exception $e) {}
 
 // Setup Filters
-[$selected_class, $selected_section] = array_pad(explode('|', $_GET['class_section'] ?? ''), 2, null);
-if ($selected_class === null || $selected_class === '') {
+$class_section_param = $_GET['class_section'] ?? '';
+$is_combined = ($class_section_param === 'all');
+[$selected_class, $selected_section] = array_pad(explode('|', $class_section_param), 2, null);
+if ($is_combined) {
+    $selected_class = 0;
+    $selected_section = 0;
+} elseif ($selected_class === null || $selected_class === '') {
     $selected_class = $available_class_sections[0]['class_id'] ?? 0;
     $selected_section = $available_class_sections[0]['section_id'] ?? 0;
 }
@@ -63,11 +69,15 @@ $selected_month = $_GET['month'] ?? date('Y-m'); // Default to current month
 $selected_class_name = '';
 $selected_section_name = '';
 
-foreach($available_class_sections as $c) {
-    if ($c['class_id'] == $selected_class && (int)$c['section_id'] == $selected_section) {
-        $selected_class_name = $c['class_name'];
-        $selected_section_name = $c['section_name'];
-        break;
+if ($is_combined) {
+    $selected_class_name = 'All Classes (Combined)';
+} else {
+    foreach($available_class_sections as $c) {
+        if ($c['class_id'] == $selected_class && (int)$c['section_id'] == $selected_section) {
+            $selected_class_name = $c['class_name'];
+            $selected_section_name = $c['section_name'];
+            break;
+        }
     }
 }
 
@@ -78,7 +88,7 @@ $students = [];
 $attendance_data = [];
 $off_days = [];
 
-if ($selected_class) {
+if ($is_combined || $selected_class) {
     try {
         // Fetch Off Days for this month
         $stmt_offs = $pdo->prepare("SELECT off_date, title FROM school_off_days WHERE DATE_FORMAT(off_date, '%Y-%m') = ?");
@@ -87,26 +97,51 @@ if ($selected_class) {
             $off_days[(int)date('d', strtotime($row['off_date']))] = $row['title'];
         }
 
-        // 1. Fetch Students in the selected class
-        $stmt_students = $pdo->prepare("
-            SELECT u.id, u.user_id_string, u.full_name, sd.father_name
-            FROM users u
-            JOIN roles r ON u.role_id = r.id
-            JOIN student_details sd ON u.id = sd.user_id
-            WHERE r.role_name = 'Student' AND u.status = 'Active' AND sd.class_id = ?
-                AND IFNULL(sd.section_id, 0) = ?
-            ORDER BY u.full_name
-        ");
-        $stmt_students->execute([$selected_class, $selected_section]);
-        $students = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
+        if ($is_combined) {
+            // 1. Fetch every active student across every class
+            $stmt_students = $pdo->prepare("
+                SELECT u.id, u.user_id_string, u.full_name, sd.father_name, sd.class_id, sd.section_id,
+                       c.class_name, sec.section_name
+                FROM users u
+                JOIN roles r ON u.role_id = r.id
+                JOIN student_details sd ON u.id = sd.user_id
+                LEFT JOIN classes c ON sd.class_id = c.id
+                LEFT JOIN sections sec ON sd.section_id = sec.id
+                WHERE r.role_name = 'Student' AND u.status = 'Active'
+                ORDER BY c.class_name, sec.section_name, u.full_name
+            ");
+            $stmt_students->execute();
+            $students = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
 
-        // 2. Fetch Attendance for this class in this month
-        $stmt_att = $pdo->prepare("
-            SELECT student_id, DAY(attendance_date) as day, status
-            FROM student_attendance
-            WHERE class_id = ? AND IFNULL(section_id, 0) = ? AND DATE_FORMAT(attendance_date, '%Y-%m') = ?
-        ");
-        $stmt_att->execute([$selected_class, $selected_section, $selected_month]);
+            // 2. Fetch attendance for every student in this month
+            $stmt_att = $pdo->prepare("
+                SELECT student_id, DAY(attendance_date) as day, status
+                FROM student_attendance
+                WHERE DATE_FORMAT(attendance_date, '%Y-%m') = ?
+            ");
+            $stmt_att->execute([$selected_month]);
+        } else {
+            // 1. Fetch Students in the selected class
+            $stmt_students = $pdo->prepare("
+                SELECT u.id, u.user_id_string, u.full_name, sd.father_name, sd.class_id, sd.section_id
+                FROM users u
+                JOIN roles r ON u.role_id = r.id
+                JOIN student_details sd ON u.id = sd.user_id
+                WHERE r.role_name = 'Student' AND u.status = 'Active' AND sd.class_id = ?
+                    AND IFNULL(sd.section_id, 0) = ?
+                ORDER BY u.full_name
+            ");
+            $stmt_students->execute([$selected_class, $selected_section]);
+            $students = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
+
+            // 2. Fetch Attendance for this class in this month
+            $stmt_att = $pdo->prepare("
+                SELECT student_id, DAY(attendance_date) as day, status
+                FROM student_attendance
+                WHERE class_id = ? AND IFNULL(section_id, 0) = ? AND DATE_FORMAT(attendance_date, '%Y-%m') = ?
+            ");
+            $stmt_att->execute([$selected_class, $selected_section, $selected_month]);
+        }
         $raw_attendance = $stmt_att->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($raw_attendance as $row) {
@@ -181,8 +216,9 @@ if ($selected_class) {
                         <div class="col-md-4">
                             <label class="form-label fw-bold text-secondary">Select Class</label>
                             <select class="form-select border-primary fw-bold" name="class_section" onchange="document.getElementById('reportFilterForm').submit()">
+                                <option value="all" <?= $is_combined ? 'selected' : '' ?>>All Classes (Combined)</option>
                                 <?php foreach($available_class_sections as $c): ?>
-                                    <option value="<?= $c['class_id'] ?>|<?= $c['section_id'] ?>" <?= ($c['class_id'] == $selected_class && (int)$c['section_id'] == $selected_section) ? 'selected' : '' ?>>
+                                    <option value="<?= $c['class_id'] ?>|<?= $c['section_id'] ?>" <?= (!$is_combined && $c['class_id'] == $selected_class && (int)$c['section_id'] == $selected_section) ? 'selected' : '' ?>>
                                         Class <?= htmlspecialchars($c['class_name']) ?><?= $c['section_name'] ? ' (' . htmlspecialchars($c['section_name']) . ')' : '' ?>
                                     </option>
                                 <?php endforeach; ?>
@@ -199,7 +235,7 @@ if ($selected_class) {
             <div class="card shadow border-0 rounded-3 printable-area">
                 <div class="card-header py-3 bg-white d-flex justify-content-between align-items-center border-bottom">
                     <h6 class="m-0 font-weight-bold text-primary">
-                        Attendance Grid: Class <?= htmlspecialchars($selected_class_name) ?><?= $selected_section_name ? ' (' . htmlspecialchars($selected_section_name) . ')' : '' ?>
+                        Attendance Grid: <?= $is_combined ? htmlspecialchars($selected_class_name) : 'Class ' . htmlspecialchars($selected_class_name) . ($selected_section_name ? ' (' . htmlspecialchars($selected_section_name) . ')' : '') ?>
                         <span class="badge bg-secondary ms-2"><?= $month_label ?></span>
                     </h6>
                     <div class="small fw-bold no-print">
@@ -225,7 +261,9 @@ if ($selected_class) {
                                     <tr>
                                         <th class="freeze-col text-start ps-3" style="width: 80px; min-width: 80px;">ID</th>
                                         <th class="freeze-col-2 text-start" style="width: 180px; min-width: 180px;">Student Name</th>
-                                        
+                                        <?php if ($is_combined): ?>
+                                        <th class="text-start" style="width: 120px; min-width: 120px;">Class</th>
+                                        <?php endif; ?>
                                         <?php for($d = 1; $d <= $days_in_month; $d++): ?>
                                             <?php $is_off = isset($off_days[$d]); ?>
                                             <th style="width: 30px; min-width: 30px; font-size: 0.75rem;" class="<?= $is_off ? 'bg-warning bg-opacity-25' : '' ?>" <?= $is_off ? 'title="'.htmlspecialchars($off_days[$d]).'"' : '' ?>><?= $d ?></th>
@@ -249,8 +287,12 @@ if ($selected_class) {
                                                 <div class="fw-bold text-dark" style="font-size: 0.85rem; mb-1"><?= htmlspecialchars($student['full_name']) ?></div>
                                                 <div class="text-muted fw-semibold" style="font-size: 0.7rem;">S/D: <?= htmlspecialchars($student['father_name'] ?? 'N/A') ?></div>
                                             </td>
-                                            
-                                            <?php for($d = 1; $d <= $days_in_month; $d++): 
+                                            <?php if ($is_combined): ?>
+                                            <td class="text-start" style="font-size: 0.8rem;">
+                                                Class <?= htmlspecialchars($student['class_name'] ?? '?') ?><?= $student['section_name'] ? ' (' . htmlspecialchars($student['section_name']) . ')' : '' ?>
+                                            </td>
+                                            <?php endif; ?>
+                                            <?php for($d = 1; $d <= $days_in_month; $d++):
                                                 $is_off = isset($off_days[$d]);
                                                 $exact_date = $selected_month . '-' . str_pad($d, 2, '0', STR_PAD_LEFT);
                                                 $status = $attendance_data[$student['id']][$d] ?? null;
@@ -266,7 +308,9 @@ if ($selected_class) {
                                                     elseif ($status === 'Leave') { $cell_class = 'att-L'; $mark = 'L'; $l_count++; $total_marked++; }
                                                     elseif ($status === 'Late') { $cell_class = 'att-LT'; $mark = 'LT'; $lt_count++; $p_count++; $total_marked++; } 
                                                     
-                                                    echo "<td class='att-cell $cell_class' title='Click to edit' onclick='openEditModal({$student['id']}, \"".htmlspecialchars($student['full_name'], ENT_QUOTES)."\", \"$exact_date\", \"".($status ?: 'Present')."\")'>$mark</td>";
+                                                    $row_class_id = (int)($student['class_id'] ?? $selected_class);
+                                                    $row_section_id = (int)($student['section_id'] ?? $selected_section);
+                                                    echo "<td class='att-cell $cell_class' title='Click to edit' onclick='openEditModal({$student['id']}, \"".htmlspecialchars($student['full_name'], ENT_QUOTES)."\", \"$exact_date\", \"".($status ?: 'Present')."\", $row_class_id, $row_section_id)'>$mark</td>";
                                                 }
                                             endfor; ?>
                                             
@@ -301,8 +345,9 @@ if ($selected_class) {
             </div>
             <form method="post">
                 <input type="hidden" name="action" value="quick_edit">
-                <input type="hidden" name="edit_class_id" value="<?= $selected_class ?>">
-                <input type="hidden" name="edit_section_id" value="<?= $selected_section ?>">
+                <input type="hidden" name="edit_class_id" id="editClassId" value="<?= $selected_class ?>">
+                <input type="hidden" name="edit_section_id" id="editSectionId" value="<?= $selected_section ?>">
+                <input type="hidden" name="return_class_section" value="<?= htmlspecialchars($is_combined ? 'all' : $selected_class . '|' . $selected_section) ?>">
                 <input type="hidden" name="edit_student_id" id="editStudentId">
                 <input type="hidden" name="edit_date" id="editDate">
                 
@@ -368,11 +413,13 @@ if ($selected_class) {
         });
     }
 
-    function openEditModal(studentId, studentName, dateStr, currentStatus) {
+    function openEditModal(studentId, studentName, dateStr, currentStatus, classId, sectionId) {
         document.getElementById('editStudentId').value = studentId;
         document.getElementById('editStudentName').textContent = studentName;
         document.getElementById('editDate').value = dateStr;
-        
+        if (typeof classId !== 'undefined') document.getElementById('editClassId').value = classId;
+        if (typeof sectionId !== 'undefined') document.getElementById('editSectionId').value = sectionId;
+
         const dateObj = new Date(dateStr);
         document.getElementById('editDateDisplay').textContent = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
         
@@ -409,7 +456,7 @@ if ($selected_class) {
         `);
         printWindow.document.write('</style></head><body>');
         printWindow.document.write('<h2>Muhaddisa School of Science & Tech</h2>');
-        printWindow.document.write('<h4>Attendance Report: Class <?= htmlspecialchars($selected_class_name) ?> (' + '<?= $month_label ?>' + ')</h4>');
+        printWindow.document.write('<h4>Attendance Report: <?= $is_combined ? htmlspecialchars($selected_class_name) : "Class " . htmlspecialchars($selected_class_name) ?> (' + '<?= $month_label ?>' + ')</h4>');
         
         let printTable = '<table><thead>' + originalTable.querySelector('thead').innerHTML + '</thead><tbody>';
         let rows = originalTable.querySelectorAll('tbody tr');
