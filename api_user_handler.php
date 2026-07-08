@@ -10,6 +10,39 @@ if (!isset($_SESSION['admin_logged_in'])) {
     exit;
 }
 
+// =======================================================
+// AUTO-PATCHER: teacher_class_assignments schema drift
+// =======================================================
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS teacher_class_assignments (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            teacher_user_id INT NOT NULL,
+            class_id INT NOT NULL,
+            section_id INT DEFAULT NULL,
+            subject_id INT DEFAULT NULL,
+            program_name VARCHAR(100) DEFAULT 'General'
+        )
+    ");
+    $existing_cols = $pdo->query("SHOW COLUMNS FROM teacher_class_assignments")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('section_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE teacher_class_assignments ADD COLUMN section_id INT DEFAULT NULL AFTER class_id");
+    }
+    if (!in_array('subject_id', $existing_cols)) {
+        $pdo->exec("ALTER TABLE teacher_class_assignments ADD COLUMN subject_id INT DEFAULT NULL AFTER section_id");
+    }
+    if (!in_array('program_name', $existing_cols)) {
+        $pdo->exec("ALTER TABLE teacher_class_assignments ADD COLUMN program_name VARCHAR(100) DEFAULT 'General'");
+    }
+    // Drop the legacy (teacher_user_id, class_id)-only unique key from before
+    // section/subject granularity existed - it blocks multiple sections/subjects
+    // for the same teacher+class with a duplicate-entry error.
+    $existing_indexes = $pdo->query("SHOW INDEX FROM teacher_class_assignments")->fetchAll(PDO::FETCH_COLUMN, 2);
+    if (in_array('teacher_class_unique', $existing_indexes)) {
+        $pdo->exec("ALTER TABLE teacher_class_assignments DROP INDEX teacher_class_unique");
+    }
+} catch (PDOException $e) { /* Ignore if already up to date */ }
+
 $response = ['status' => 'error', 'message' => 'Invalid request.'];
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_POST['action'] ?? null;
