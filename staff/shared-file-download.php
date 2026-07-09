@@ -39,6 +39,13 @@ if (!file_exists($full_path)) {
     exit('File not found on disk.');
 }
 
+// Disable output compression/buffering - a host-level gzip filter changing
+// the byte count after Content-Length is already sent corrupts the download
+// (browsers/Office/Adobe reject the mismatched file as "unreadable").
+if (function_exists('apache_setenv')) { @apache_setenv('no-gzip', '1'); }
+@ini_set('zlib.output_compression', 'Off');
+while (ob_get_level() > 0) { ob_end_clean(); }
+
 header('Content-Description: File Transfer');
 header('Content-Type: application/octet-stream');
 header('Content-Disposition: attachment; filename="' . basename($file['file_name']) . '"');
