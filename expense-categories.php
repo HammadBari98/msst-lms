@@ -78,7 +78,7 @@ try {
                                     <td><strong><?= htmlspecialchars($cat['name']) ?></strong></td>
                                     <td><span class="badge bg-info"><?= $cat['product_count'] ?></span></td>
                                     <td>
-                                        <button class="btn btn-sm btn-warning" onclick='editCategory(<?= json_encode($cat) ?>)' data-bs-toggle="modal" data-bs-target="#editCategoryModal">
+                                        <button class="btn btn-sm btn-warning" onclick='editCategory(<?= htmlspecialchars(json_encode($cat), ENT_QUOTES, "UTF-8") ?>)' data-bs-toggle="modal" data-bs-target="#editCategoryModal">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <button class="btn btn-sm btn-danger" onclick='deleteCategory(<?= $cat["id"] ?>, "<?= htmlspecialchars(addslashes($cat["name"])) ?>")' data-bs-toggle="modal" data-bs-target="#deleteModal">
@@ -120,7 +120,7 @@ try {
                                     <td><?= htmlspecialchars($p['company'] ?? '—') ?></td>
                                     <td><?= number_format($p['current_price'], 2) ?></td>
                                     <td>
-                                        <button class="btn btn-sm btn-warning" onclick='editProduct(<?= json_encode($p) ?>)' data-bs-toggle="modal" data-bs-target="#editProductModal">
+                                        <button class="btn btn-sm btn-warning" onclick='editProduct(<?= htmlspecialchars(json_encode($p), ENT_QUOTES, "UTF-8") ?>)' data-bs-toggle="modal" data-bs-target="#editProductModal">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <button class="btn btn-sm btn-danger" onclick='deleteProduct(<?= $p["id"] ?>, "<?= htmlspecialchars(addslashes($p["name"])) ?>")' data-bs-toggle="modal" data-bs-target="#deleteModal">
