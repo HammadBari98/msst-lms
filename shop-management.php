@@ -140,9 +140,6 @@ try {
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
-                                <?php if (empty($shops)): ?>
-                                <tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-store fa-2x mb-3 d-block"></i>No shops found. Click "Add New Shop" to add your first shop!</td></tr>
-                                <?php endif; ?>
                             </tbody>
                             <tfoot>
                                 <tr class="table-light">
@@ -429,6 +426,7 @@ $(document).ready(function() {
             info: "Showing _START_ to _END_ of _TOTAL_ shops",
             infoEmpty: "Showing 0 to 0 of 0 shops",
             infoFiltered: "(filtered from _MAX_ total shops)",
+            emptyTable: '<i class="fas fa-store fa-2x mb-3 d-block"></i>No shops found. Click "Add New Shop" to add your first shop!',
             paginate: {
                 first: '<i class="fas fa-angle-double-left"></i>',
                 previous: '<i class="fas fa-angle-left"></i>',
