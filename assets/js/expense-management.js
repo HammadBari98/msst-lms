@@ -392,6 +392,47 @@ document.getElementById('confirmDelete').addEventListener('click', async functio
     }
 });
 
+// ========== MARK AS PAID ==========
+
+function showMarkPaidModal(id, billNo, amount) {
+    document.getElementById('markPaidId').value = id;
+    document.getElementById('markPaidBillNo').textContent = billNo;
+    document.getElementById('markPaidAmount').textContent = Number(amount).toFixed(2);
+    document.getElementById('markPaidCn').value = '';
+    document.getElementById('markPaidDate').value = new Date().toISOString().slice(0, 10);
+}
+
+document.getElementById('confirmMarkPaid').addEventListener('click', async function() {
+    const id = document.getElementById('markPaidId').value;
+    const cn = document.getElementById('markPaidCn').value.trim();
+    const paymentDate = document.getElementById('markPaidDate').value;
+    if (!id) return;
+
+    if (!cn) {
+        showAlert('Cheque number is required', 'warning');
+        return;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('action', 'process_payment');
+        formData.append('expense_ids[]', id);
+        formData.append('cn', cn);
+        formData.append('payment_date', paymentDate);
+
+        const response = await fetch('api_expense_handler.php', { method: 'POST', body: formData });
+        const result = await response.json();
+
+        showAlert(result.message || 'Expense marked as paid', result.success ? 'success' : 'danger');
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('markPaidModal')).hide();
+            setTimeout(() => location.reload(), 800);
+        }
+    } catch (error) {
+        showAlert('Error: ' + error.message, 'danger');
+    }
+});
+
 // ========== ALERTS ==========
 
 function showAlert(msg, type) {

@@ -387,6 +387,11 @@ try {
                                         <button class="btn btn-sm btn-warning" onclick="editExpense2(<?= htmlspecialchars(json_encode($e), ENT_QUOTES, 'UTF-8') ?>)" data-bs-toggle="modal" data-bs-target="#editModal">
                                             <i class="fas fa-edit"></i>
                                         </button>
+                                        <?php if (!$is_paid): ?>
+                                        <button class="btn btn-sm btn-success" onclick="showMarkPaidModal(<?= $e['id'] ?>, '<?= htmlspecialchars(addslashes($e['bill_no'])) ?>', <?= $e['amount'] ?>)" data-bs-toggle="modal" data-bs-target="#markPaidModal" title="Mark as Paid">
+                                            <i class="fas fa-check-circle"></i>
+                                        </button>
+                                        <?php endif; ?>
                                         <button class="btn btn-sm btn-danger" onclick="deleteExpense2(<?= $e['id'] ?>, '<?= htmlspecialchars(addslashes($e['bill_no'])) ?>')" data-bs-toggle="modal" data-bs-target="#deleteModal">
                                             <i class="fas fa-trash"></i>
                                         </button>
@@ -657,6 +662,35 @@ try {
 </div>
 
 <!-- Delete Modal -->
+<div class="modal fade" id="markPaidModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5><i class="fas fa-check-circle"></i> Mark as Paid</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Mark bill <strong id="markPaidBillNo"></strong> (Rs. <strong id="markPaidAmount"></strong>) as paid?</p>
+                <input type="hidden" id="markPaidId">
+                <div class="mb-3">
+                    <label class="form-label">Cheque Number <span class="text-danger">*</span></label>
+                    <input type="text" id="markPaidCn" class="form-control" required placeholder="Enter cheque number">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Payment Date</label>
+                    <input type="date" id="markPaidDate" class="form-control" value="<?= date('Y-m-d') ?>">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmMarkPaid">
+                    <i class="fas fa-check-circle"></i> Confirm Payment
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="deleteModal">
     <div class="modal-dialog">
         <div class="modal-content">

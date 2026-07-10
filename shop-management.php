@@ -976,8 +976,17 @@ function showPaymentModal() {
     document.getElementById('paymentItemsCount').textContent = selectedExpenses.size;
     document.getElementById('paymentTotalAmount').textContent = 'Rs. ' + totalAmount.toFixed(2);
 
+    const shopModalInstance = bootstrap.Modal.getInstance(document.getElementById('shopExpensesModal'));
+    if (shopModalInstance) shopModalInstance.hide();
+
     new bootstrap.Modal(document.getElementById('paymentModal')).show();
 }
+
+document.getElementById('paymentModal').addEventListener('hidden.bs.modal', function() {
+    if (currentShopId) {
+        viewShopExpenses(currentShopId, currentShopName, expectedTotal);
+    }
+});
 
 function processPayment() {
     const form = document.getElementById('paymentForm');
@@ -1003,9 +1012,8 @@ function processPayment() {
     .then(data => {
         if (data.success) {
             alert(data.message);
-            bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
             clearSelection();
-            viewShopExpenses(currentShopId, currentShopName, expectedTotal);
+            bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
         } else {
             alert('Error: ' + data.message);
             paymentBtn.innerHTML = originalText;
