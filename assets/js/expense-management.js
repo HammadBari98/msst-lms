@@ -280,9 +280,8 @@ function saveExpense(callback) {
 
 $('#saveAndContinueBtn').click(function() {
     saveExpense(function() {
-        showAlert('Expense saved successfully!', 'success');
+        showAlert('Expense saved! Add another below.', 'success');
         resetAddForm();
-        setTimeout(() => location.reload(), 800);
     });
 });
 
@@ -393,6 +392,28 @@ document.getElementById('confirmDelete').addEventListener('click', async functio
 });
 
 // ========== MARK AS PAID ==========
+
+async function markAsUnpaid(id, billNo) {
+    if (!confirm(`Mark bill ${billNo} as unpaid? This clears its cheque number and payment date.`)) {
+        return;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('action', 'mark_unpaid');
+        formData.append('id', id);
+
+        const response = await fetch('api_expense_handler.php', { method: 'POST', body: formData });
+        const result = await response.json();
+
+        showAlert(result.message || 'Expense marked as unpaid', result.success ? 'success' : 'danger');
+        if (result.success) {
+            setTimeout(() => location.reload(), 800);
+        }
+    } catch (error) {
+        showAlert('Error: ' + error.message, 'danger');
+    }
+}
 
 function showMarkPaidModal(id, billNo, amount) {
     document.getElementById('markPaidId').value = id;

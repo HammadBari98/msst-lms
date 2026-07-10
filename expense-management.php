@@ -391,6 +391,10 @@ try {
                                         <button class="btn btn-sm btn-success" onclick="showMarkPaidModal(<?= $e['id'] ?>, '<?= htmlspecialchars(addslashes($e['bill_no'])) ?>', <?= $e['amount'] ?>)" data-bs-toggle="modal" data-bs-target="#markPaidModal" title="Mark as Paid">
                                             <i class="fas fa-check-circle"></i>
                                         </button>
+                                        <?php else: ?>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="markAsUnpaid(<?= $e['id'] ?>, '<?= htmlspecialchars(addslashes($e['bill_no'])) ?>')" title="Mark as Unpaid">
+                                            <i class="fas fa-rotate-left"></i>
+                                        </button>
                                         <?php endif; ?>
                                         <button class="btn btn-sm btn-danger" onclick="deleteExpense2(<?= $e['id'] ?>, '<?= htmlspecialchars(addslashes($e['bill_no'])) ?>')" data-bs-toggle="modal" data-bs-target="#deleteModal">
                                             <i class="fas fa-trash"></i>
@@ -559,7 +563,7 @@ try {
                             <small class="text-muted">Edit to auto-calculate unit price</small>
                         </div>
                         <div class="col-md-3">
-                            <label>Cheque No. <small class="text-muted">(optional)</small></label>
+                            <label>Cheque No. <small class="text-muted">(optional — entering this marks it Paid)</small></label>
                             <input type="text" name="cn" class="form-control">
                         </div>
                     </div>
@@ -648,7 +652,7 @@ try {
                             <small class="text-muted">For display only — recomputed from date on save</small>
                         </div>
                         <div class="col-md-3">
-                            <label>Cheque No. <small class="text-muted">(optional)</small></label>
+                            <label>Cheque No. <small class="text-muted">(does not change paid status)</small></label>
                             <input type="text" name="cn" class="form-control">
                         </div>
                     </div>

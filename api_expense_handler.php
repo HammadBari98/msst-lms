@@ -216,10 +216,14 @@ try {
             $current_balance = $stmt->fetchColumn();
             $new_balance = $current_balance + $total_amount;
 
+            $cn = trim($_POST['cn'] ?? '');
+            $is_paid = $cn !== '' ? 1 : 0;
+            $payment_date = $is_paid ? $date : null;
+
             $stmt = $pdo->prepare("
                 INSERT INTO expenses
-                (bill_no, date, shop_id, amount, unit_price, quantity, balance, product_id, month, cn, is_paid)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                (bill_no, date, shop_id, amount, unit_price, quantity, balance, product_id, month, cn, is_paid, payment_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $_POST['bill_no'],
@@ -231,7 +235,9 @@ try {
                 $new_balance,
                 $_POST['product_id'],
                 $month,
-                $_POST['cn'] ?? null
+                $cn !== '' ? $cn : null,
+                $is_paid,
+                $payment_date
             ]);
             echo json_encode(['success' => true, 'message' => 'Expense added']);
             break;
@@ -364,6 +370,19 @@ try {
                 http_response_code(500);
                 echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
             }
+            break;
+
+        case 'mark_unpaid':
+            $id = $_POST['id'] ?? null;
+            if (!$id) {
+                echo json_encode(['success' => false, 'message' => 'Expense id is required']);
+                break;
+            }
+
+            $stmt = $pdo->prepare("UPDATE expenses SET is_paid = 0, cn = NULL, payment_date = NULL WHERE id = ?");
+            $stmt->execute([$id]);
+
+            echo json_encode(['success' => true, 'message' => 'Expense marked as unpaid']);
             break;
 
         case 'recalculate_balance':
