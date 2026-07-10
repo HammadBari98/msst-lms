@@ -13,13 +13,14 @@
         <li><a href="teacher-management.php"><i class="fas fa-chalkboard-teacher fa-fw me-2"></i> <span>Teacher Management</span></a></li>
         <li><a href="fee-management.php"><i class="fas fa-file-invoice-dollar fa-fw me-2"></i> <span>Fee Management</span></a></li>
         <li><a href="fee-payment-report.php"><i class="fas fa-list-check fa-fw me-2"></i> <span>Fee Payment Report</span></a></li>
-        <li class="dropdown">
-            <a href="#" class="dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">
+        <li>
+            <a href="#" aria-expanded="false" onclick="event.preventDefault(); var sub=this.nextElementSibling; var nowHidden=sub.classList.toggle('d-none'); this.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');">
                 <i class="fas fa-chart-bar fa-fw me-2"></i> <span>Expense Management</span>
+                <i class="fas fa-chevron-right dropdown-icon"></i>
             </a>
-            <ul class="dropdown-menu">
-                <li><a class="dropdown-item" href="expense-management.php"><i class="fas fa-receipt me-2"></i>View Expenses</a></li>
-                <li><a class="dropdown-item" href="expense-categories.php"><i class="fas fa-tags me-2"></i>Categories & Products</a></li>
+            <ul class="sidebar-submenu d-none">
+                <li><a href="expense-management.php"><i class="fas fa-receipt me-2"></i>View Expenses</a></li>
+                <li><a href="expense-categories.php"><i class="fas fa-tags me-2"></i>Categories & Products</a></li>
             </ul>
         </li>
         <li><a href="shop-management.php"><i class="fas fa-shop fa-fw me-2"></i> <span>Shop Management</span></a></li>

@@ -76,6 +76,46 @@ try {
     ");
 } catch (PDOException $e) { /* Ignore if already up to date */ }
 
+// =======================================================
+// AUTO-PATCHER: heal pre-existing expense_products/expenses tables
+// that predate this feature's columns (CREATE TABLE IF NOT EXISTS
+// above is a no-op when an older-shaped table already exists).
+// =======================================================
+try {
+    $ep_cols = $pdo->query("SHOW COLUMNS FROM expense_products")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('current_price', $ep_cols)) {
+        $pdo->exec("ALTER TABLE expense_products ADD COLUMN current_price DECIMAL(10,2) DEFAULT 0.00");
+    }
+    if (!in_array('last_updated', $ep_cols)) {
+        $pdo->exec("ALTER TABLE expense_products ADD COLUMN last_updated DATE DEFAULT NULL");
+    }
+} catch (PDOException $e) { /* Ignore if already up to date */ }
+
+try {
+    $exp_cols = $pdo->query("SHOW COLUMNS FROM expenses")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('shop_id', $exp_cols)) {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN shop_id INT DEFAULT NULL AFTER date");
+    }
+    if (!in_array('quantity', $exp_cols)) {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN quantity INT DEFAULT 1");
+    }
+    if (!in_array('unit_price', $exp_cols)) {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN unit_price DECIMAL(10,2) DEFAULT 0.00");
+    }
+    if (!in_array('is_paid', $exp_cols)) {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN is_paid TINYINT(1) NOT NULL DEFAULT 0");
+    }
+    if (!in_array('cn', $exp_cols)) {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN cn VARCHAR(50) DEFAULT NULL");
+    }
+    if (!in_array('payment_date', $exp_cols)) {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN payment_date DATE DEFAULT NULL");
+    }
+    if (!in_array('balance', $exp_cols)) {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN balance DECIMAL(10,2) NOT NULL DEFAULT 0.00");
+    }
+} catch (PDOException $e) { /* Ignore if already up to date */ }
+
 // SEPARATE FILTERS FOR SUMMARY AND EXPENSE DETAILS
 
 // 1. Summary filter (month range)
