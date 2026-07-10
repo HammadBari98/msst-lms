@@ -134,9 +134,9 @@ try {
                                         <?= $shop['last_expense_date'] ? date('d M Y', strtotime($shop['last_expense_date'])) : '<span class="text-muted">No expenses</span>' ?>
                                     </td>
                                     <td class="text-center action-buttons">
-                                        <button class="btn btn-sm btn-outline-primary" onclick="viewShopExpenses(<?= $shop['id'] ?>, '<?= addslashes($shop['name']) ?>', <?= $shop['total_expense'] ?>)" data-bs-toggle="tooltip" title="View Expenses"><i class="fas fa-eye"></i></button>
-                                        <button class="btn btn-sm btn-outline-warning" onclick="showEditShopModal(<?= $shop['id'] ?>, '<?= addslashes($shop['name']) ?>', '<?= addslashes($shop['phone'] ?? '') ?>', '<?= addslashes($shop['address'] ?? '') ?>')" data-bs-toggle="tooltip" title="Edit Shop"><i class="fas fa-edit"></i></button>
-                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteShop(<?= $shop['id'] ?>, '<?= addslashes($shop['name']) ?>')" data-bs-toggle="tooltip" title="Delete Shop"><i class="fas fa-trash"></i></button>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="viewShopExpenses(<?= $shop['id'] ?>, '<?= htmlspecialchars(addslashes($shop['name'])) ?>', <?= $shop['total_expense'] ?>)" data-bs-toggle="tooltip" title="View Expenses"><i class="fas fa-eye"></i></button>
+                                        <button class="btn btn-sm btn-outline-warning" onclick="showEditShopModal(<?= $shop['id'] ?>, '<?= htmlspecialchars(addslashes($shop['name'])) ?>', '<?= htmlspecialchars(addslashes($shop['phone'] ?? '')) ?>', '<?= htmlspecialchars(addslashes($shop['address'] ?? '')) ?>')" data-bs-toggle="tooltip" title="Edit Shop"><i class="fas fa-edit"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteShop(<?= $shop['id'] ?>, '<?= htmlspecialchars(addslashes($shop['name'])) ?>')" data-bs-toggle="tooltip" title="Delete Shop"><i class="fas fa-trash"></i></button>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>

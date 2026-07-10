@@ -81,10 +81,10 @@ try {
                                         <button class="btn btn-sm btn-warning" onclick='editCategory(<?= json_encode($cat) ?>)' data-bs-toggle="modal" data-bs-target="#editCategoryModal">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-danger" onclick='deleteCategory(<?= $cat["id"] ?>, "<?= addslashes($cat["name"]) ?>")' data-bs-toggle="modal" data-bs-target="#deleteModal">
+                                        <button class="btn btn-sm btn-danger" onclick='deleteCategory(<?= $cat["id"] ?>, "<?= htmlspecialchars(addslashes($cat["name"])) ?>")' data-bs-toggle="modal" data-bs-target="#deleteModal">
                                             <i class="fas fa-trash"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-primary" onclick='openAddProductModal(<?= $cat["id"] ?>, "<?= addslashes($cat["name"]) ?>")' data-bs-toggle="modal" data-bs-target="#addProductModal">
+                                        <button class="btn btn-sm btn-primary" onclick='openAddProductModal(<?= $cat["id"] ?>, "<?= htmlspecialchars(addslashes($cat["name"])) ?>")' data-bs-toggle="modal" data-bs-target="#addProductModal">
                                             <i class="fas fa-plus-circle"></i> Add Product
                                         </button>
                                     </td>
@@ -123,7 +123,7 @@ try {
                                         <button class="btn btn-sm btn-warning" onclick='editProduct(<?= json_encode($p) ?>)' data-bs-toggle="modal" data-bs-target="#editProductModal">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-danger" onclick='deleteProduct(<?= $p["id"] ?>, "<?= addslashes($p["name"]) ?>")' data-bs-toggle="modal" data-bs-target="#deleteModal">
+                                        <button class="btn btn-sm btn-danger" onclick='deleteProduct(<?= $p["id"] ?>, "<?= htmlspecialchars(addslashes($p["name"])) ?>")' data-bs-toggle="modal" data-bs-target="#deleteModal">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </td>

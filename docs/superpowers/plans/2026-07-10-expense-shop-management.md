@@ -2684,7 +2684,7 @@ try {
                                         <button class="btn btn-sm btn-warning" onclick="editExpense2(<?= htmlspecialchars(json_encode($e), ENT_QUOTES, 'UTF-8') ?>)" data-bs-toggle="modal" data-bs-target="#editModal">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-danger" onclick="deleteExpense2(<?= $e['id'] ?>, '<?= addslashes($e['bill_no']) ?>')" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                                        <button class="btn btn-sm btn-danger" onclick="deleteExpense2(<?= $e['id'] ?>, '<?= htmlspecialchars(addslashes($e['bill_no'])) ?>')" data-bs-toggle="modal" data-bs-target="#deleteModal">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </td>
