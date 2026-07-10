@@ -13,6 +13,16 @@
         <li><a href="teacher-management.php"><i class="fas fa-chalkboard-teacher fa-fw me-2"></i> <span>Teacher Management</span></a></li>
         <li><a href="fee-management.php"><i class="fas fa-file-invoice-dollar fa-fw me-2"></i> <span>Fee Management</span></a></li>
         <li><a href="fee-payment-report.php"><i class="fas fa-list-check fa-fw me-2"></i> <span>Fee Payment Report</span></a></li>
+        <li class="dropdown">
+            <a href="#" class="dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">
+                <i class="fas fa-chart-bar fa-fw me-2"></i> <span>Expense Management</span>
+            </a>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="expense-management.php"><i class="fas fa-receipt me-2"></i>View Expenses</a></li>
+                <li><a class="dropdown-item" href="expense-categories.php"><i class="fas fa-tags me-2"></i>Categories & Products</a></li>
+            </ul>
+        </li>
+        <li><a href="shop-management.php"><i class="fas fa-shop fa-fw me-2"></i> <span>Shop Management</span></a></li>
         <li><a href="class-management.php"><i class="fas fa-chalkboard"></i> <span>Classes & Sections</span></a></li>
         <li><a href="timetable-management.php"><i class="fas fa-calendar-alt fa-fw me-2"></i> <span>Timetable Management</span></a></li>
         <li><a href="view-scores.php"><i class="fas fa-chart-line fa-fw me-2"></i> <span>View Scores</span></a></li>
