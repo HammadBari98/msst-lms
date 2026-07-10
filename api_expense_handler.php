@@ -49,6 +49,12 @@ try {
             break;
 
         case 'delete_category':
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM expense_products WHERE category_id = ?");
+            $stmt->execute([$_POST['id']]);
+            if ($stmt->fetchColumn() > 0) {
+                echo json_encode(['message' => 'Cannot delete category with existing products. Delete or reassign its products first.']);
+                break;
+            }
             $stmt = $pdo->prepare("DELETE FROM expense_categories WHERE id = ?");
             $stmt->execute([$_POST['id']]);
             echo json_encode(['message' => 'Category deleted']);
@@ -88,6 +94,12 @@ try {
             break;
 
         case 'delete_product':
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM expenses WHERE product_id = ?");
+            $stmt->execute([$_POST['id']]);
+            if ($stmt->fetchColumn() > 0) {
+                echo json_encode(['message' => 'Cannot delete product with existing expense records']);
+                break;
+            }
             $stmt = $pdo->prepare("DELETE FROM expense_products WHERE id = ?");
             $stmt->execute([$_POST['id']]);
             echo json_encode(['message' => 'Product deleted']);
