@@ -60,18 +60,6 @@ $aspect_labels = [
     <style>
         .rating-stars { color: #f6c23e; white-space: nowrap; }
         .rating-stars .fa-star.empty { color: #dee2e6; }
-        .review-item {
-            border: 1px solid #eaecf4;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin-bottom: 1rem;
-        }
-        .review-item .aspect-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.85rem;
-            color: #5a5c69;
-        }
     </style>
 </head>
 <body>
@@ -144,16 +132,68 @@ $aspect_labels = [
     </div>
 
     <div class="modal fade" id="reviewsModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content border-0 shadow">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title"><i class="fas fa-comments me-2"></i>Reviews for <span id="reviewsTeacherName"></span></h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body bg-light" id="reviewsModalBody" style="max-height: 70vh; overflow-y: auto;">
+                <div class="modal-body bg-light">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover align-middle" id="reviewDetailTable" style="width:100%">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Clarity</th>
+                                    <th>Knowledge</th>
+                                    <th>Engagement</th>
+                                    <th>Helpfulness</th>
+                                    <th>Feedback</th>
+                                    <th>Comment</th>
+                                    <th>Date</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reviewDetailBody"></tbody>
+                        </table>
+                    </div>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="editReviewModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Review</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body bg-light">
+                    <input type="hidden" id="editReviewId">
+                    <?php foreach ($aspect_labels as $key => $label): ?>
+                    <div class="mb-3">
+                        <label class="form-label"><?= htmlspecialchars($label) ?></label>
+                        <select class="form-select" id="edit_<?= $key ?>">
+                            <option value="5">5 - Excellent</option>
+                            <option value="4">4 - Good</option>
+                            <option value="3">3 - Average</option>
+                            <option value="2">2 - Fair</option>
+                            <option value="1">1 - Poor</option>
+                        </select>
+                    </div>
+                    <?php endforeach; ?>
+                    <div class="mb-3">
+                        <label class="form-label">Comment</label>
+                        <textarea class="form-control" id="editComments" rows="4" required minlength="10"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveEditReviewBtn"><i class="fas fa-save me-2"></i>Save Changes</button>
                 </div>
             </div>
         </div>
@@ -176,41 +216,131 @@ $aspect_labels = [
         const reviewsByTeacher = <?= json_encode($reviews_by_teacher, JSON_HEX_TAG) ?>;
         const aspectLabels = <?= json_encode($aspect_labels) ?>;
 
-        function starsHtml(value) {
-            let html = '<span class="rating-stars">';
-            for (let i = 1; i <= 5; i++) {
-                html += `<i class="fas fa-star${i <= value ? '' : ' empty'}"></i>`;
+        let reviewDetailTable = null;
+        let currentTeacherId = null;
+        let currentTeacherName = '';
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
+
+        function findReviewById(id) {
+            for (const teacherId in reviewsByTeacher) {
+                const found = reviewsByTeacher[teacherId].find(r => String(r.id) === String(id));
+                if (found) return found;
             }
-            return html + '</span>';
+            return null;
         }
 
         function showReviews(teacherId, teacherName) {
+            currentTeacherId = teacherId;
+            currentTeacherName = teacherName;
             document.getElementById('reviewsTeacherName').textContent = teacherName;
             const reviews = reviewsByTeacher[teacherId] || [];
-            const body = document.getElementById('reviewsModalBody');
+            const tbody = document.getElementById('reviewDetailBody');
 
-            if (reviews.length === 0) {
-                body.innerHTML = '<p class="text-muted text-center mb-0">No reviews yet.</p>';
-            } else {
-                body.innerHTML = reviews.map(r => {
-                    const aspectRows = Object.keys(aspectLabels).map(key =>
-                        `<div class="aspect-row"><span>${aspectLabels[key]}</span>${starsHtml(r[key])}</div>`
-                    ).join('');
-                    return `
-                        <div class="review-item">
-                            <div class="d-flex justify-content-between mb-2">
-                                <strong>${r.student_name} <span class="text-muted small">(${r.student_code})</span></strong>
-                                <span class="text-muted small">${r.updated_at}</span>
-                            </div>
-                            ${aspectRows}
-                            <p class="mt-2 mb-0">${r.comments.replace(/</g, '&lt;')}</p>
-                        </div>
-                    `;
-                }).join('');
+            tbody.innerHTML = reviews.map(r => `
+                <tr>
+                    <td>${escapeHtml(r.student_name)}<br><span class="text-muted small">${escapeHtml(r.student_code)}</span></td>
+                    <td class="text-center">${r.rating_clarity}</td>
+                    <td class="text-center">${r.rating_knowledge}</td>
+                    <td class="text-center">${r.rating_engagement}</td>
+                    <td class="text-center">${r.rating_helpfulness}</td>
+                    <td class="text-center">${r.rating_feedback_quality}</td>
+                    <td style="max-width: 260px; white-space: normal;">${escapeHtml(r.comments)}</td>
+                    <td class="text-nowrap">${escapeHtml(r.updated_at)}</td>
+                    <td class="text-center text-nowrap">
+                        <button class="btn btn-sm btn-outline-primary edit-review-btn" data-id="${r.id}" title="Edit"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-outline-danger delete-review-btn" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+
+            if (reviewDetailTable) {
+                reviewDetailTable.destroy();
+                reviewDetailTable = null;
             }
+            reviewDetailTable = $('#reviewDetailTable').DataTable({
+                pageLength: 10,
+                order: [[7, 'desc']],
+                columnDefs: [{ orderable: false, targets: 8 }]
+            });
 
             new bootstrap.Modal(document.getElementById('reviewsModal')).show();
         }
+
+        $(document).on('click', '.edit-review-btn', function() {
+            const review = findReviewById($(this).data('id'));
+            if (!review) return;
+
+            document.getElementById('editReviewId').value = review.id;
+            Object.keys(aspectLabels).forEach(key => {
+                document.getElementById('edit_' + key).value = review[key];
+            });
+            document.getElementById('editComments').value = review.comments;
+
+            const reviewsModalInstance = bootstrap.Modal.getInstance(document.getElementById('reviewsModal'));
+            if (reviewsModalInstance) reviewsModalInstance.hide();
+
+            new bootstrap.Modal(document.getElementById('editReviewModal')).show();
+        });
+
+        document.getElementById('editReviewModal').addEventListener('hidden.bs.modal', function() {
+            if (currentTeacherId !== null) {
+                showReviews(currentTeacherId, currentTeacherName);
+            }
+        });
+
+        document.getElementById('saveEditReviewBtn').addEventListener('click', async function() {
+            const id = document.getElementById('editReviewId').value;
+            const comments = document.getElementById('editComments').value.trim();
+
+            if (comments.length < 10) {
+                alert('Comment must be at least 10 characters.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'update');
+            formData.append('id', id);
+            Object.keys(aspectLabels).forEach(key => {
+                formData.append(key, document.getElementById('edit_' + key).value);
+            });
+            formData.append('comments', comments);
+
+            try {
+                const response = await fetch('api_teacher_reviews_handler.php', { method: 'POST', body: formData });
+                const result = await response.json();
+                if (result.success) {
+                    setTimeout(() => location.reload(), 300);
+                } else {
+                    alert(result.message || 'Failed to update review');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+
+        $(document).on('click', '.delete-review-btn', async function() {
+            const id = $(this).data('id');
+            if (!confirm('Delete this review? This cannot be undone.')) return;
+
+            try {
+                const response = await fetch('api_teacher_reviews_handler.php', {
+                    method: 'POST',
+                    body: new URLSearchParams({ action: 'delete', id })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    setTimeout(() => location.reload(), 300);
+                } else {
+                    alert(result.message || 'Failed to delete review');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
 
         const sidebar = document.getElementById('sidebar');
         const mainContent = document.getElementById('main-content');
