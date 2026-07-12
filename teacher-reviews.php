@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/config/db_config.php';
+require_once __DIR__ . '/include/review_schema.php';
 
 if (!isset($_SESSION['admin_logged_in'])) {
     header('Location: login.php');
@@ -9,17 +10,20 @@ if (!isset($_SESSION['admin_logged_in'])) {
 
 $admin_name = $_SESSION['admin_name'] ?? 'Admin';
 
-// Teachers with review counts + average overall rating
+ensure_review_schema($pdo);
+
+// Teachers with review counts + average overall rating (across whatever criteria exist)
 $stmt = $pdo->query("
     SELECT
         u.id,
         u.full_name,
         u.user_id_string,
-        COUNT(tr.id) AS review_count,
-        AVG((tr.rating_clarity + tr.rating_knowledge + tr.rating_engagement + tr.rating_helpfulness + tr.rating_feedback_quality) / 5) AS avg_rating
+        COUNT(DISTINCT tr.id) AS review_count,
+        AVG(trr.rating) AS avg_rating
     FROM users u
     JOIN roles r ON u.role_id = r.id
     LEFT JOIN teacher_reviews tr ON tr.teacher_user_id = u.id
+    LEFT JOIN teacher_review_ratings trr ON trr.review_id = tr.id
     WHERE r.role_name = 'Teacher'
     GROUP BY u.id
     ORDER BY review_count DESC, u.full_name
@@ -34,18 +38,32 @@ $stmt = $pdo->query("
     ORDER BY tr.updated_at DESC
 ");
 $all_reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Attach each review's per-criteria ratings (keyed by criteria_id)
+$review_ids = array_column($all_reviews, 'id');
+$ratings_by_review = [];
+if (!empty($review_ids)) {
+    $placeholders = implode(',', array_fill(0, count($review_ids), '?'));
+    $stmt = $pdo->prepare("SELECT review_id, criteria_id, rating FROM teacher_review_ratings WHERE review_id IN ($placeholders)");
+    $stmt->execute($review_ids);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $ratings_by_review[$r['review_id']][$r['criteria_id']] = (int)$r['rating'];
+    }
+}
+foreach ($all_reviews as &$rev) {
+    $rev['ratings'] = $ratings_by_review[$rev['id']] ?? [];
+}
+unset($rev);
+
 $reviews_by_teacher = [];
 foreach ($all_reviews as $rev) {
     $reviews_by_teacher[$rev['teacher_user_id']][] = $rev;
 }
 
-$aspect_labels = [
-    'rating_clarity' => 'Clarity of Explanation',
-    'rating_knowledge' => 'Subject Knowledge',
-    'rating_engagement' => 'Engagement & Interaction',
-    'rating_helpfulness' => 'Helpfulness & Support',
-    'rating_feedback_quality' => 'Quality of Feedback',
-];
+// All criteria (including inactive ones, so historical reviews on retired
+// criteria still render with a real label instead of a bare id)
+$stmt = $pdo->query("SELECT id, label, is_active FROM review_criteria ORDER BY sort_order ASC");
+$all_criteria = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -142,17 +160,7 @@ $aspect_labels = [
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover align-middle" id="reviewDetailTable" style="width:100%">
                             <thead class="table-light">
-                                <tr>
-                                    <th>Student</th>
-                                    <th>Clarity</th>
-                                    <th>Knowledge</th>
-                                    <th>Engagement</th>
-                                    <th>Helpfulness</th>
-                                    <th>Feedback</th>
-                                    <th>Comment</th>
-                                    <th>Date</th>
-                                    <th class="text-center">Actions</th>
-                                </tr>
+                                <tr id="reviewDetailHeadRow"></tr>
                             </thead>
                             <tbody id="reviewDetailBody"></tbody>
                         </table>
@@ -174,18 +182,7 @@ $aspect_labels = [
                 </div>
                 <div class="modal-body bg-light">
                     <input type="hidden" id="editReviewId">
-                    <?php foreach ($aspect_labels as $key => $label): ?>
-                    <div class="mb-3">
-                        <label class="form-label"><?= htmlspecialchars($label) ?></label>
-                        <select class="form-select" id="edit_<?= $key ?>">
-                            <option value="5">5 - Excellent</option>
-                            <option value="4">4 - Good</option>
-                            <option value="3">3 - Average</option>
-                            <option value="2">2 - Fair</option>
-                            <option value="1">1 - Poor</option>
-                        </select>
-                    </div>
-                    <?php endforeach; ?>
+                    <div id="editRatingsContainer"></div>
                     <div class="mb-3">
                         <label class="form-label">Comment</label>
                         <textarea class="form-control" id="editComments" rows="4" required minlength="10"></textarea>
@@ -214,7 +211,9 @@ $aspect_labels = [
         });
 
         const reviewsByTeacher = <?= json_encode($reviews_by_teacher, JSON_HEX_TAG) ?>;
-        const aspectLabels = <?= json_encode($aspect_labels) ?>;
+        const allCriteria = <?= json_encode($all_criteria, JSON_HEX_TAG) ?>;
+        const criteriaLabelById = {};
+        allCriteria.forEach(c => { criteriaLabelById[c.id] = c.label; });
 
         let reviewDetailTable = null;
         let currentTeacherId = null;
@@ -238,16 +237,22 @@ $aspect_labels = [
             currentTeacherName = teacherName;
             document.getElementById('reviewsTeacherName').textContent = teacherName;
             const reviews = reviewsByTeacher[teacherId] || [];
-            const tbody = document.getElementById('reviewDetailBody');
 
+            // Show a column for every criteria referenced by at least one of this teacher's reviews
+            const usedIds = new Set();
+            reviews.forEach(r => Object.keys(r.ratings).forEach(cid => usedIds.add(cid)));
+            const columns = allCriteria.filter(c => usedIds.has(String(c.id)));
+
+            document.getElementById('reviewDetailHeadRow').innerHTML =
+                '<th>Student</th>' +
+                columns.map(c => `<th>${escapeHtml(c.label)}</th>`).join('') +
+                '<th>Comment</th><th>Date</th><th class="text-center">Actions</th>';
+
+            const tbody = document.getElementById('reviewDetailBody');
             tbody.innerHTML = reviews.map(r => `
                 <tr>
                     <td>${escapeHtml(r.student_name)}<br><span class="text-muted small">${escapeHtml(r.student_code)}</span></td>
-                    <td class="text-center">${r.rating_clarity}</td>
-                    <td class="text-center">${r.rating_knowledge}</td>
-                    <td class="text-center">${r.rating_engagement}</td>
-                    <td class="text-center">${r.rating_helpfulness}</td>
-                    <td class="text-center">${r.rating_feedback_quality}</td>
+                    ${columns.map(c => `<td class="text-center">${r.ratings[c.id] ?? '-'}</td>`).join('')}
                     <td style="max-width: 260px; white-space: normal;">${escapeHtml(r.comments)}</td>
                     <td class="text-nowrap">${escapeHtml(r.updated_at)}</td>
                     <td class="text-center text-nowrap">
@@ -257,27 +262,40 @@ $aspect_labels = [
                 </tr>
             `).join('');
 
+            const dateColIndex = 1 + columns.length;
+            const actionsColIndex = dateColIndex + 1;
+
             if (reviewDetailTable) {
                 reviewDetailTable.destroy();
                 reviewDetailTable = null;
             }
             reviewDetailTable = $('#reviewDetailTable').DataTable({
                 pageLength: 10,
-                order: [[7, 'desc']],
-                columnDefs: [{ orderable: false, targets: 8 }]
+                order: [[dateColIndex, 'desc']],
+                columnDefs: [{ orderable: false, targets: actionsColIndex }]
             });
 
             new bootstrap.Modal(document.getElementById('reviewsModal')).show();
         }
+
+        const ratingTexts = { 5: 'Excellent', 4: 'Good', 3: 'Average', 2: 'Fair', 1: 'Poor' };
 
         $(document).on('click', '.edit-review-btn', function() {
             const review = findReviewById($(this).data('id'));
             if (!review) return;
 
             document.getElementById('editReviewId').value = review.id;
-            Object.keys(aspectLabels).forEach(key => {
-                document.getElementById('edit_' + key).value = review[key];
-            });
+            document.getElementById('editRatingsContainer').innerHTML = Object.keys(review.ratings).map(cid => {
+                const label = criteriaLabelById[cid] || ('Criteria #' + cid);
+                const current = review.ratings[cid];
+                const options = [5, 4, 3, 2, 1].map(v =>
+                    `<option value="${v}" ${v === current ? 'selected' : ''}>${v} - ${ratingTexts[v]}</option>`
+                ).join('');
+                return `<div class="mb-3">
+                    <label class="form-label">${escapeHtml(label)}</label>
+                    <select class="form-select edit-rating-input" data-criteria-id="${cid}">${options}</select>
+                </div>`;
+            }).join('');
             document.getElementById('editComments').value = review.comments;
 
             const reviewsModalInstance = bootstrap.Modal.getInstance(document.getElementById('reviewsModal'));
@@ -304,8 +322,8 @@ $aspect_labels = [
             const formData = new FormData();
             formData.append('action', 'update');
             formData.append('id', id);
-            Object.keys(aspectLabels).forEach(key => {
-                formData.append(key, document.getElementById('edit_' + key).value);
+            document.querySelectorAll('.edit-rating-input').forEach(sel => {
+                formData.append('ratings[' + sel.dataset.criteriaId + ']', sel.value);
             });
             formData.append('comments', comments);
 

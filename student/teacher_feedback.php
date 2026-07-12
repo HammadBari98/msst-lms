@@ -1,11 +1,14 @@
 <?php
 session_start();
 require_once __DIR__ . '/../config/db_config.php';
+require_once __DIR__ . '/../include/review_schema.php';
 
 if (!isset($_SESSION['student_logged_in'])) {
     header('Location: login.php');
     exit();
 }
+
+ensure_review_schema($pdo);
 
 $student_user_id = $_SESSION['student_user_db_id'];
 
@@ -21,13 +24,9 @@ $stmt = $pdo->prepare("
 $stmt->execute([$student_user_id]);
 $teachers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$feedback_aspects = [
-    'clarity' => 'Clarity of Explanation',
-    'knowledge' => 'Subject Knowledge',
-    'engagement' => 'Engagement & Interaction',
-    'helpfulness' => 'Helpfulness & Support',
-    'feedback_quality' => 'Quality of Feedback on Assignments',
-];
+// Active review criteria, admin-configurable
+$stmt = $pdo->query("SELECT id, label FROM review_criteria WHERE is_active = 1 ORDER BY sort_order ASC");
+$criteria = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $rating_scale = [
     5 => 'Excellent',
@@ -49,33 +48,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_feedback'])) {
 
     if (empty($selected_teacher_id) || !in_array((int)$selected_teacher_id, $valid_teacher_ids)) {
         $feedback_error_msg = "Please select a valid teacher.";
-    } elseif (count($ratings) < count($feedback_aspects)) {
+    } elseif (empty($criteria)) {
+        $feedback_error_msg = "No review criteria are configured yet. Please contact the administration.";
+    } elseif (count($ratings) < count($criteria)) {
         $feedback_error_msg = "Please provide ratings for all aspects.";
     } elseif (empty($comments)) {
         $feedback_error_msg = "Please provide your valuable comments.";
     } else {
+        $pdo->beginTransaction();
+
         $stmt = $pdo->prepare("
-            INSERT INTO teacher_reviews
-                (student_user_id, teacher_user_id, rating_clarity, rating_knowledge, rating_engagement, rating_helpfulness, rating_feedback_quality, comments)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                rating_clarity = VALUES(rating_clarity),
-                rating_knowledge = VALUES(rating_knowledge),
-                rating_engagement = VALUES(rating_engagement),
-                rating_helpfulness = VALUES(rating_helpfulness),
-                rating_feedback_quality = VALUES(rating_feedback_quality),
-                comments = VALUES(comments)
+            INSERT INTO teacher_reviews (student_user_id, teacher_user_id, comments)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE comments = VALUES(comments), updated_at = CURRENT_TIMESTAMP
         ");
-        $stmt->execute([
-            $student_user_id,
-            $selected_teacher_id,
-            (int)$ratings['clarity'],
-            (int)$ratings['knowledge'],
-            (int)$ratings['engagement'],
-            (int)$ratings['helpfulness'],
-            (int)$ratings['feedback_quality'],
-            $comments
-        ]);
+        $stmt->execute([$student_user_id, $selected_teacher_id, $comments]);
+
+        $review_id_stmt = $pdo->prepare("SELECT id FROM teacher_reviews WHERE student_user_id = ? AND teacher_user_id = ?");
+        $review_id_stmt->execute([$student_user_id, $selected_teacher_id]);
+        $review_id = $review_id_stmt->fetchColumn();
+
+        $rating_stmt = $pdo->prepare("
+            INSERT INTO teacher_review_ratings (review_id, criteria_id, rating)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE rating = VALUES(rating)
+        ");
+        foreach ($criteria as $c) {
+            $val = $ratings[$c['id']] ?? null;
+            if ($val !== null) {
+                $rating_stmt->execute([$review_id, $c['id'], (int)$val]);
+            }
+        }
+
+        $pdo->commit();
 
         $selected_name = '';
         foreach ($teachers as $t) {
@@ -86,11 +91,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_feedback'])) {
 }
 
 // Load any existing reviews by this student, keyed by teacher_id, for pre-filling the form via JS
-$stmt = $pdo->prepare("SELECT * FROM teacher_reviews WHERE student_user_id = ?");
+$stmt = $pdo->prepare("
+    SELECT tr.teacher_user_id, tr.comments, trr.criteria_id, trr.rating
+    FROM teacher_reviews tr
+    LEFT JOIN teacher_review_ratings trr ON trr.review_id = tr.id
+    WHERE tr.student_user_id = ?
+");
 $stmt->execute([$student_user_id]);
 $existing_reviews = [];
 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $existing_reviews[$row['teacher_user_id']] = $row;
+    $tid = $row['teacher_user_id'];
+    if (!isset($existing_reviews[$tid])) {
+        $existing_reviews[$tid] = ['comments' => $row['comments'], 'ratings' => []];
+    }
+    if ($row['criteria_id']) {
+        $existing_reviews[$tid]['ratings'][$row['criteria_id']] = (int)$row['rating'];
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -173,6 +189,8 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 
                 <?php if (empty($teachers)): ?>
                     <div class="alert alert-info">No teachers are currently assigned to your class, so there's nothing to review yet.</div>
+                <?php elseif (empty($criteria)): ?>
+                    <div class="alert alert-info">The review form isn't set up yet. Please check back later.</div>
                 <?php else: ?>
                 <div class="card shadow mb-4 feedback-form-container">
                     <div class="card-header py-3">
@@ -188,7 +206,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
                                 <select class="form-select form-select-lg" id="teacher_id" name="teacher_id" required>
                                     <option value="" selected disabled>-- Choose a Teacher --</option>
                                     <?php foreach ($teachers as $t): ?>
-                                        <option value="<?= $t['id'] ?>" <?= isset($existing_reviews[$t['id']]) ? 'data-reviewed="1"' : '' ?>><?= htmlspecialchars($t['full_name']) ?></option>
+                                        <option value="<?= $t['id'] ?>"><?= htmlspecialchars($t['full_name']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -197,14 +215,14 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 
                             <h5 class="mb-3">Rate the following aspects:</h5>
 
-                            <?php foreach ($feedback_aspects as $key => $label): ?>
+                            <?php foreach ($criteria as $c): ?>
                             <div class="rating-group">
-                                <label class="aspect-label"><?= htmlspecialchars($label) ?>:</label>
+                                <label class="aspect-label"><?= htmlspecialchars($c['label']) ?>:</label>
                                 <div class="rating-options">
                                     <?php foreach (array_reverse($rating_scale, true) as $value => $text): ?>
                                     <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="radio" name="ratings[<?= $key ?>]" id="rating_<?= $key ?>_<?= $value ?>" value="<?= $value ?>" required>
-                                        <label class="form-check-label" for="rating_<?= $key ?>_<?= $value ?>"><?= htmlspecialchars($text) ?></label>
+                                        <input class="form-check-input" type="radio" name="ratings[<?= $c['id'] ?>]" id="rating_<?= $c['id'] ?>_<?= $value ?>" value="<?= $value ?>" required>
+                                        <label class="form-check-label" for="rating_<?= $c['id'] ?>_<?= $value ?>"><?= htmlspecialchars($text) ?></label>
                                     </div>
                                     <?php endforeach; ?>
                                 </div>
@@ -257,7 +275,6 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         const existingReviews = <?= json_encode($existing_reviews, JSON_HEX_TAG) ?>;
         const teacherSelect = document.getElementById('teacher_id');
         const editingNotice = document.getElementById('editingNotice');
-        const aspectKeyMap = { clarity: 'rating_clarity', knowledge: 'rating_knowledge', engagement: 'rating_engagement', helpfulness: 'rating_helpfulness', feedback_quality: 'rating_feedback_quality' };
 
         teacherSelect.addEventListener('change', function() {
             const review = existingReviews[this.value];
@@ -266,9 +283,9 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 
             if (review) {
                 editingNotice.style.display = 'block';
-                Object.keys(aspectKeyMap).forEach(key => {
-                    const val = review[aspectKeyMap[key]];
-                    const radio = document.getElementById('rating_' + key + '_' + val);
+                Object.keys(review.ratings).forEach(criteriaId => {
+                    const val = review.ratings[criteriaId];
+                    const radio = document.getElementById('rating_' + criteriaId + '_' + val);
                     if (radio) radio.checked = true;
                 });
                 document.getElementById('comments').value = review.comments || '';
