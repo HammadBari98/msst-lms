@@ -179,7 +179,7 @@ if ($view_mode === 'voucher') {
     if (!empty($slip_no)) {
         try {
             $stmt = $pdo->prepare("
-                SELECT fs.*, u.full_name, u.user_id_string, sd.fee_category,
+                SELECT fs.*, u.full_name, u.user_id_string, sd.fee_category, sd.father_name,
                        c.class_name, s.section_name
                 FROM fee_slips fs
                 LEFT JOIN users u ON fs.student_id = u.id
@@ -199,6 +199,7 @@ if ($view_mode === 'voucher') {
                 
                 $voucher_data = [
                     'student_name' => $fee_slip['full_name'],
+                    'father_name' => $fee_slip['father_name'] ?: 'N/A',
                     'student_id_display' => $fee_slip['user_id_string'],
                     'class_section' => $fee_slip['class_name'] ?? 'N/A',
                     'section_alpha' => $fee_slip['section_name'] ?? 'N/A',
