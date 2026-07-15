@@ -30,6 +30,20 @@ try {
     $pdo->exec("ALTER TABLE student_details ADD COLUMN IF NOT EXISTS one_time_fees_cleared TINYINT(1) DEFAULT 0");
 } catch (PDOException $e) { /* Column already exists */ }
 
+// Ensure column exists to track how many months a slip covers (multi-month generation)
+try {
+    $pdo->exec("ALTER TABLE fee_slips ADD COLUMN IF NOT EXISTS duration_months INT DEFAULT 1");
+} catch (PDOException $e) { /* Column already exists */ }
+
+// Builds a period label for a fee slip, e.g. "Jan 2026" or "Jan 2026 to Apr 2026" for multi-month slips
+function formatFeePeriod($month_year, $duration_months = 1) {
+    $duration_months = max(1, (int)$duration_months);
+    $start_label = date('M Y', strtotime($month_year));
+    if ($duration_months <= 1) return $start_label;
+    $end_label = date('M Y', strtotime($month_year . ' +' . ($duration_months - 1) . ' months'));
+    return $start_label . ' to ' . $end_label;
+}
+
 // One-time migration: retire the old fixed-price Lunch presets in favor of a free-input Lunch Fee amount
 try {
     $pdo->exec("UPDATE fee_components SET is_active = 0 WHERE TRIM(name) = 'Lunch' AND is_active = 1");
@@ -339,7 +353,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $slip_total = $installment_amount + ($installments > 1 ? $installment_charge : 0);
                     
                     // Calculates Due Date as the 10th of the NEXT month from the exact moment of creation
-                    $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date) VALUES (?, ?, ?, ?, DATE_ADD(DATE_FORMAT(DATE_ADD(NOW(), INTERVAL 1 MONTH), '%Y-%m-10'), INTERVAL ? DAY), 'Pending', ?, NOW())")->execute([$slip_no, $student_id, $target_date, $slip_total, $days_to_add, $student_cat]);
+                    $pdo->prepare("INSERT INTO fee_slips (slip_no, student_id, month_year, amount, due_date, status, fee_category, generated_date, duration_months) VALUES (?, ?, ?, ?, DATE_ADD(DATE_FORMAT(DATE_ADD(NOW(), INTERVAL 1 MONTH), '%Y-%m-10'), INTERVAL ? DAY), 'Pending', ?, NOW(), ?)")->execute([$slip_no, $student_id, $target_date, $slip_total, $days_to_add, $student_cat, $multi_months]);
                     
                     $comp_insert = $pdo->prepare("INSERT INTO fee_slip_components (slip_no, component_id, component_name, amount, component_type) VALUES (?, ?, ?, ?, ?)");
                     foreach ($component_data as $comp) {
@@ -1310,7 +1324,16 @@ function generateVoucherHTML(record, components, copyType) {
     try {
         if (record.due_date) dueDate = new Date(record.due_date).toLocaleDateString('en-GB');
         if (record.generated_date) generatedDate = new Date(record.generated_date).toLocaleDateString('en-GB');
-        if (record.month_year) monthYear = new Date(record.month_year).toLocaleDateString('en-GB', {month: 'short', year: 'numeric'});
+        if (record.month_year) {
+            const startDate = new Date(record.month_year);
+            monthYear = startDate.toLocaleDateString('en-GB', {month: 'short', year: 'numeric'});
+            const durationMonths = parseInt(record.duration_months) || 1;
+            if (durationMonths > 1) {
+                const endDate = new Date(startDate);
+                endDate.setMonth(endDate.getMonth() + (durationMonths - 1));
+                monthYear += ' to ' + endDate.toLocaleDateString('en-GB', {month: 'short', year: 'numeric'});
+            }
+        }
     } catch (e) {}
 
     let classSec = (record.class_name || 'N/A');

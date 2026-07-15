@@ -39,6 +39,15 @@ try {
 $view_mode = $_GET['view'] ?? 'list';
 $slip_no = $_GET['id'] ?? '';
 
+// Builds a period label for a fee slip, e.g. "Jan 2026" or "Jan 2026 to Apr 2026" for multi-month slips
+function formatFeePeriod($month_year, $duration_months = 1) {
+    $duration_months = max(1, (int)$duration_months);
+    $start_label = date('M Y', strtotime($month_year));
+    if ($duration_months <= 1) return $start_label;
+    $end_label = date('M Y', strtotime($month_year . ' +' . ($duration_months - 1) . ' months'));
+    return $start_label . ' to ' . $end_label;
+}
+
 
 // --- PHP VOUCHER RENDER FUNCTION (MODERN MSST LAYOUT) ---
 function render_voucher_copy($copy_type, $data) {
@@ -208,7 +217,7 @@ if ($view_mode === 'voucher') {
                     'issue_date' => date('d/m/Y', strtotime($fee_slip['generated_date'])),
                     'validity_date' => date('d/m/Y', strtotime($fee_slip['due_date'] . ' +10 days')),
                     'due_date' => date('d/m/Y', strtotime($fee_slip['due_date'])),
-                    'fee_period' => date('M Y', strtotime($fee_slip['month_year'])),
+                    'fee_period' => formatFeePeriod($fee_slip['month_year'], $fee_slip['duration_months'] ?? 1),
                     'fee_components' => $fee_components,
                     'net_payable_before_due_raw' => $fee_slip['amount'],
                     'late_payment_daily_charge' => "25",
@@ -274,7 +283,7 @@ if ($view_mode === 'voucher') {
             foreach ($fee_slips as $slip) {
                 $installment_plan[] = [
                     'id' => $slip['slip_no'],
-                    'name' => 'Fee Slip - ' . date('F Y', strtotime($slip['month_year'])),
+                    'name' => 'Fee Slip - ' . formatFeePeriod($slip['month_year'], $slip['duration_months'] ?? 1),
                     'due_date' => $slip['due_date'],
                     'amount' => $slip['amount'],
                     'status' => $slip['status'],
