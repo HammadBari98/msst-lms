@@ -988,7 +988,7 @@ function generateVoucherHTML(record, components, copyType) {
                         <div class="school-info">
                             <strong>Muhaddisa School of Science and Technology</strong><br>
                             Head Office : Kushmara Toq, Near Fatima Jinnah Girls HSS, Quaidabad Skardu<br>
-                            Contact: Cell# 0317-9174495 , 03555851351 , 03554201394<br>
+                            Contact: Cell# 0317-9174495 , 03555851351 , 03554201394 , +92 3554201394<br>
                             E-mail:fees@msstskardu.com,Web:www.msstskardu.com
                         </div>
                     </div>
