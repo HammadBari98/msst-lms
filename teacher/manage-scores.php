@@ -84,12 +84,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     elseif ($_POST['action'] === 'create_assessment') {
         try {
             [$class_id, $section_id] = array_pad(explode('|', $_POST['class_id'] ?? ''), 2, null);
-            $stmt = $pdo->prepare("INSERT INTO assessments (teacher_id, class_id, section_id, subject_name, assessment_type, title, total_marks, assessment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([
-                $teacher_id, (int)$class_id, $section_id ? (int)$section_id : null, $_POST['subject_name'],
-                $_POST['assessment_type'], $_POST['title'], $_POST['total_marks'], $_POST['assessment_date']
-            ]);
-            $msg = '<div class="alert alert-success">Assessment created successfully!</div>';
+            $section_id = $section_id ? (int)$section_id : null;
+
+            // Prevent duplicate subject columns on the Award List: block a second assessment
+            // for the same class/section/subject/type in the same month.
+            $stmt_dupe = $pdo->prepare("
+                SELECT COUNT(*) FROM assessments
+                WHERE class_id = ? AND IFNULL(section_id,0) = IFNULL(?,0) AND subject_name = ? AND assessment_type = ?
+                AND assessment_date LIKE ?
+            ");
+            $stmt_dupe->execute([(int)$class_id, $section_id, $_POST['subject_name'], $_POST['assessment_type'], substr($_POST['assessment_date'], 0, 7) . '%']);
+
+            if ($stmt_dupe->fetchColumn() > 0) {
+                $msg = '<div class="alert alert-danger">An assessment for "' . htmlspecialchars($_POST['subject_name']) . '" (' . htmlspecialchars($_POST['assessment_type']) . ') already exists for this class/section this month. Please edit or grade the existing assessment instead.</div>';
+            } else {
+                $stmt = $pdo->prepare("INSERT INTO assessments (teacher_id, class_id, section_id, subject_name, assessment_type, title, total_marks, assessment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([
+                    $teacher_id, (int)$class_id, $section_id, $_POST['subject_name'],
+                    $_POST['assessment_type'], $_POST['title'], $_POST['total_marks'], $_POST['assessment_date']
+                ]);
+                $msg = '<div class="alert alert-success">Assessment created successfully!</div>';
+            }
         } catch (Exception $e) { $msg = '<div class="alert alert-danger">Error: ' . $e->getMessage() . '</div>'; }
     }
 

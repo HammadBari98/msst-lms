@@ -58,10 +58,21 @@ if ($class_id && $exam_type && $exam_month) {
     $class_name = $stmt_cname->fetchColumn();
 
     // 2. Get Assessments (Subjects) for this specific Exam
+    // A subject can end up with multiple assessment rows for the same class/section/type/month
+    // (e.g. a teacher accidentally creates the assessment twice). Only keep one assessment per
+    // subject_name so the award list shows one column per subject — prefer whichever duplicate
+    // actually has scores recorded against it, since that's the one the teacher was really using.
     $stmt_assessments = $pdo->prepare("
-        SELECT id, subject_name, total_marks
-        FROM assessments
-        WHERE class_id = ? AND IFNULL(section_id,0) = IFNULL(?,0) AND assessment_type = ? AND assessment_date LIKE ?
+        SELECT id, subject_name, total_marks FROM (
+            SELECT a.id, a.subject_name, a.total_marks,
+                ROW_NUMBER() OVER (
+                    PARTITION BY a.subject_name
+                    ORDER BY (SELECT COUNT(*) FROM student_scores ss WHERE ss.assessment_id = a.id) DESC, a.id DESC
+                ) AS rn
+            FROM assessments a
+            WHERE a.class_id = ? AND IFNULL(a.section_id,0) = IFNULL(?,0) AND a.assessment_type = ? AND a.assessment_date LIKE ?
+        ) ranked
+        WHERE rn = 1
         ORDER BY subject_name ASC
     ");
     // Append '%' to match the year-month (e.g. '2026-05%')
@@ -162,7 +173,9 @@ if ($class_id && $exam_type && $exam_month) {
         .award-table th, .award-table td { vertical-align: middle; text-align: center; border: 1px solid #dee2e6; }
         .award-table th { background-color: #f1f3f5 !important; font-weight: bold; }
         .text-absent { color: #dc3545; font-weight: bold; }
-        
+
+        .score-input { width: 65px; margin: 0 auto; text-align: center; padding: 2px; }
+
         .print-header { display: none; text-align: center; margin-bottom: 20px; border-bottom: 3px double #000; padding-bottom: 10px; }
         .print-header h2 { font-weight: 800; font-family: "Times New Roman", Times, serif; color: #1a365d; }
         .print-subheader { display: flex; justify-content: space-between; font-size: 1.2rem; font-weight: bold; margin-top: 10px; }
@@ -175,6 +188,7 @@ if ($class_id && $exam_type && $exam_month) {
             .print-header { display: block; }
             .award-table th { background-color: #e9ecef !important; -webkit-print-color-adjust: exact; }
             .table-responsive { overflow: visible !important; }
+            .score-input { border: none !important; background: transparent !important; box-shadow: none !important; padding: 0; }
             @page { size: landscape; margin: 1cm; }
         }
     </style>
@@ -241,7 +255,10 @@ if ($class_id && $exam_type && $exam_month) {
                         <div class="card shadow border-0">
                             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center no-print">
                                 <h6 class="m-0 font-weight-bold text-success"><i class="fas fa-file-invoice me-2"></i> Result Compiled Successfully</h6>
-                                <button onclick="window.print()" class="btn btn-sm btn-dark fw-bold"><i class="fas fa-print me-1"></i> Print Award List</button>
+                                <div>
+                                    <button type="button" id="saveAllMarksBtn" class="btn btn-sm btn-success fw-bold me-2"><i class="fas fa-save me-1"></i> Save All Marks</button>
+                                    <button onclick="window.print()" class="btn btn-sm btn-dark fw-bold"><i class="fas fa-print me-1"></i> Print Award List</button>
+                                </div>
                             </div>
                             <div class="card-body p-0 p-md-4 bg-white">
                                 
@@ -286,12 +303,12 @@ if ($class_id && $exam_type && $exam_month) {
                                                     <!-- Dynamic Subject Scores -->
                                                     <?php foreach ($subjects as $asm_id => $sub): ?>
                                                         <?php $score = $row['scores'][$asm_id]; ?>
-                                                        <td>
-                                                            <?php if ($score === null || $score === ''): ?>
-                                                                <span class="text-absent">A</span>
-                                                            <?php else: ?>
-                                                                <?= floatval($score) ?>
-                                                            <?php endif; ?>
+                                                        <td class="p-1">
+                                                            <input type="number" class="form-control form-control-sm score-input"
+                                                                data-student-id="<?= $row['id'] ?>" data-assessment-id="<?= $asm_id ?>"
+                                                                step="0.5" min="0" max="<?= $sub['max_marks'] ?>"
+                                                                value="<?= ($score === null || $score === '') ? '' : floatval($score) ?>"
+                                                                placeholder="A">
                                                         </td>
                                                     <?php endforeach; ?>
                                                     
@@ -317,6 +334,41 @@ if ($class_id && $exam_type && $exam_month) {
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        document.getElementById('saveAllMarksBtn')?.addEventListener('click', function() {
+            const btn = this;
+            const scores = Array.from(document.querySelectorAll('.score-input')).map(inp => ({
+                assessment_id: inp.dataset.assessmentId,
+                student_id: inp.dataset.studentId,
+                marks: inp.value.trim()
+            }));
+
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+
+            fetch('../ajax/save_award_scores.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scores })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Marks saved successfully! The page will reload to refresh totals and ranking.');
+                    window.location.reload();
+                } else {
+                    alert('Error saving marks: ' + (data.message || 'Unknown error'));
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                }
+            })
+            .catch(err => {
+                alert('Network error while saving: ' + err.message);
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
+        });
+
         const sidebar = document.querySelector('.sidebar');
         const mainContent = document.getElementById('main-content');
         document.getElementById('sidebarToggle').addEventListener('click', () => {
