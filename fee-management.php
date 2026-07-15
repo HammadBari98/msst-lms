@@ -1339,7 +1339,7 @@ function generateVoucherHTML(record, components, copyType) {
                 <img src="assets/images/msst-logo.png" alt="MSST Logo" class="mv-logo">
                 <div class="mv-school-text">
                     <div class="mv-school-name">Muhaddisa School of Science & Technology</div>
-                    <div class="mv-school-address">Kushmara Toq, Near Fatima Jinnah Girls HSS, Quaidabad Skardu<br>0317-9174495 | www.msstskardu.com</div>
+                    <div class="mv-school-address">Kushmara Toq, Near Fatima Jinnah Girls HSS, Quaidabad Skardu<br>0317-9174495 , +92 3554201394 | www.msstskardu.com</div>
                 </div>
                 <div class="mv-copy-badge">
                     <span class="mv-fbise">Affiliated with FBISE</span>

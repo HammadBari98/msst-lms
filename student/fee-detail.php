@@ -85,7 +85,7 @@ function render_voucher_copy($copy_type, $data) {
             <img src="<?= htmlspecialchars($data['logo_path']) ?>" alt="MSST Logo" class="mv-logo">
             <div class="mv-school-text">
                 <div class="mv-school-name">Muhaddisa School of Science & Technology</div>
-                <div class="mv-school-address">Kushmara Toq, Near Fatima Jinnah Girls HSS, Quaidabad Skardu<br>0317-9174495 | www.msstskardu.com</div>
+                <div class="mv-school-address">Kushmara Toq, Near Fatima Jinnah Girls HSS, Quaidabad Skardu<br>0317-9174495 , +92 3554201394 | www.msstskardu.com</div>
             </div>
             <div class="mv-copy-badge">
                 <span class="mv-fbise">Affiliated with FBISE</span>
@@ -216,7 +216,7 @@ if ($view_mode === 'voucher') {
                     'summer_task_note_amount' => "550",
                     'school_name' => "Muhaddisa School of Science and Technology",
                     'school_address_line1' => "Head Office : Kushmara Toq, Near Fatima Jinnah Girls HSS, Quaidabad Skardu",
-                    'school_contact_line' => "Contact: Cell# 0317-9174495 , 03555851351 , 03554201394",
+                    'school_contact_line' => "Contact: Cell# 0317-9174495 , 03555851351 , 03554201394 , +92 3554201394",
                     'school_email_web_line' => "E-mail:fees@msstskardu.com,Web:www.msstskardu.com",
                     'bank_details_line' => "Bank Al Habib : Ghulam Abbas, AC #: 20440981003831012",
                     'website_url' => "www.msstskardu.com",
