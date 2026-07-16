@@ -45,6 +45,7 @@ $assigned_classes = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 $section_id = $section_id !== null && $section_id !== '' ? (int)$section_id : null;
 $exam_type = $_GET['exam_type'] ?? 'Monthly Test';
 $exam_month = $_GET['exam_month'] ?? date('Y-m');
+$my_subjects_only = isset($_GET['my_subjects_only']) && $_GET['my_subjects_only'] == '1';
 
 $award_list = [];
 $subjects = [];
@@ -62,6 +63,7 @@ if ($class_id && $exam_type && $exam_month) {
     // (e.g. a teacher accidentally creates the assessment twice). Only keep one assessment per
     // subject_name so the award list shows one column per subject — prefer whichever duplicate
     // actually has scores recorded against it, since that's the one the teacher was really using.
+    $teacher_filter_sql = $my_subjects_only ? ' AND a.teacher_id = ?' : '';
     $stmt_assessments = $pdo->prepare("
         SELECT id, subject_name, total_marks FROM (
             SELECT a.id, a.subject_name, a.total_marks,
@@ -70,13 +72,15 @@ if ($class_id && $exam_type && $exam_month) {
                     ORDER BY (SELECT COUNT(*) FROM student_scores ss WHERE ss.assessment_id = a.id) DESC, a.id DESC
                 ) AS rn
             FROM assessments a
-            WHERE a.class_id = ? AND IFNULL(a.section_id,0) = IFNULL(?,0) AND a.assessment_type = ? AND a.assessment_date LIKE ?
+            WHERE a.class_id = ? AND IFNULL(a.section_id,0) = IFNULL(?,0) AND a.assessment_type = ? AND a.assessment_date LIKE ?{$teacher_filter_sql}
         ) ranked
         WHERE rn = 1
         ORDER BY subject_name ASC
     ");
     // Append '%' to match the year-month (e.g. '2026-05%')
-    $stmt_assessments->execute([$class_id, $section_id, $exam_type, $exam_month . '%']);
+    $assessment_params = [$class_id, $section_id, $exam_type, $exam_month . '%'];
+    if ($my_subjects_only) { $assessment_params[] = $teacher_id; }
+    $stmt_assessments->execute($assessment_params);
     $assessments = $stmt_assessments->fetchAll(PDO::FETCH_ASSOC);
 
     if (!empty($assessments)) {
@@ -238,6 +242,14 @@ if ($class_id && $exam_type && $exam_month) {
                             <div class="col-md-3">
                                 <button type="submit" class="btn btn-primary w-100 fw-bold shadow-sm"><i class="fas fa-filter me-2"></i> Generate Award List</button>
                             </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="my_subjects_only" value="1" id="mySubjectsOnly" <?= $my_subjects_only ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-bold text-secondary" for="mySubjectsOnly">
+                                        Show only the subject(s) I teach for this class (hide other teachers' subjects)
+                                    </label>
+                                </div>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -249,25 +261,28 @@ if ($class_id && $exam_type && $exam_month) {
                         <div class="alert alert-warning shadow-sm border-0 text-center p-5 no-print">
                             <i class="fas fa-folder-open fa-4x mb-3 text-warning opacity-50"></i>
                             <h4 class="fw-bold text-dark">No Records Found</h4>
-                            <p class="mb-0">There are no subject assessments matching "<?= htmlspecialchars($exam_type) ?>" for <?= date('F Y', strtotime($exam_month)) ?> in this class.<br>Please ensure teachers have created their assessments under `Manage Scores` using this exact Month and Type.</p>
+                            <p class="mb-0">There are no subject assessments matching "<?= htmlspecialchars($exam_type) ?>" for <?= date('F Y', strtotime($exam_month)) ?> in this class<?= $my_subjects_only ? ' that you created' : '' ?>.<br>Please ensure teachers have created their assessments under `Manage Scores` using this exact Month and Type<?= $my_subjects_only ? ', or uncheck "Show only the subject(s) I teach" to see everyone\'s subjects' : '' ?>.</p>
                         </div>
                     <?php else: ?>
                         <div class="card shadow border-0">
                             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center no-print">
-                                <h6 class="m-0 font-weight-bold text-success"><i class="fas fa-file-invoice me-2"></i> Result Compiled Successfully</h6>
+                                <h6 class="m-0 font-weight-bold text-success">
+                                    <i class="fas fa-file-invoice me-2"></i> Result Compiled Successfully
+                                    <?php if ($my_subjects_only): ?><span class="badge bg-info text-dark ms-2">My Subjects Only</span><?php endif; ?>
+                                </h6>
                                 <div>
                                     <button type="button" id="saveAllMarksBtn" class="btn btn-sm btn-success fw-bold me-2"><i class="fas fa-save me-1"></i> Save All Marks</button>
                                     <button onclick="window.print()" class="btn btn-sm btn-dark fw-bold"><i class="fas fa-print me-1"></i> Print Award List</button>
                                 </div>
                             </div>
                             <div class="card-body p-0 p-md-4 bg-white">
-                                
+
                                 <!-- Official Print Header -->
                                 <div class="print-header">
                                     <h2><i class="fas fa-graduation-cap me-2 text-dark"></i>Muhaddisa School of Science & Technology</h2>
                                     <div class="print-subheader">
                                         <span><?= date('F Y', strtotime($exam_month)) ?></span>
-                                        <span class="text-dark"><?= htmlspecialchars($exam_type) ?> Result</span>
+                                        <span class="text-dark"><?= htmlspecialchars($exam_type) ?> Result<?= $my_subjects_only ? ' (My Subjects Only)' : '' ?></span>
                                         <span style="color: #dc3545;">Class <?= htmlspecialchars($class_name) ?></span>
                                     </div>
                                 </div>
