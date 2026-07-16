@@ -31,7 +31,7 @@ if (!$assessment) {
 }
 
 $stmt = $pdo->prepare("
-    SELECT u.id as student_id, u.full_name, u.user_id_string, ss.marks_obtained, ss.remarks
+    SELECT u.id as student_id, u.full_name, u.user_id_string, sd.father_name, ss.marks_obtained, ss.remarks
     FROM users u
     JOIN student_details sd ON u.id = sd.user_id
     LEFT JOIN student_scores ss ON u.id = ss.student_id AND ss.assessment_id = ?
@@ -53,8 +53,10 @@ foreach ($students as $student) {
     $marks = $student['marks_obtained'] !== null ? htmlspecialchars($student['marks_obtained']) : '';
     $remarks = $student['remarks'] !== null ? htmlspecialchars($student['remarks']) : '';
     
+    $father_line = !empty($student['father_name']) ? ' &middot; S/O ' . htmlspecialchars($student['father_name']) : '';
+
     echo '<tr>';
-    echo '<td><strong>' . htmlspecialchars($student['full_name']) . '</strong><br><small class="text-muted">' . htmlspecialchars($student['user_id_string']) . '</small></td>';
+    echo '<td><strong>' . htmlspecialchars($student['full_name']) . '</strong><br><small class="text-muted">' . htmlspecialchars($student['user_id_string']) . $father_line . '</small></td>';
     
     echo '<td><input type="number" name="marks[' . $student['student_id'] . ']" class="form-control" step="0.5" min="0" value="' . $marks . '" placeholder="Marks"></td>';
     
