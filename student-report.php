@@ -90,6 +90,21 @@ if ($selected_student_id) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="style.css">
+    <style>
+        .print-header { display: none; text-align: center; margin-bottom: 20px; border-bottom: 3px double #000; padding-bottom: 10px; }
+        .print-header h2 { font-weight: 800; font-family: "Times New Roman", Times, serif; color: #1a365d; }
+        .print-subheader { display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: bold; margin-top: 10px; }
+
+        @media print {
+            body { background-color: white; font-size: 12pt; }
+            .sidebar, .topbar, .footer, .no-print { display: none !important; }
+            #main-content, .content-wrapper { margin: 0 !important; padding: 0 !important; width: 100%; }
+            .card { box-shadow: none !important; border: none !important; }
+            .print-header { display: block; }
+            table th { background-color: #e9ecef !important; -webkit-print-color-adjust: exact; }
+            .table-responsive { overflow: visible !important; }
+        }
+    </style>
 </head>
 <body>
 
@@ -149,15 +164,32 @@ if ($selected_student_id) {
 
                 <?php else: ?>
                 
-                <div class="d-sm-flex align-items-center justify-content-between mb-4">
+                <div class="d-sm-flex align-items-center justify-content-between mb-4 no-print">
                     <h1 class="h3 mb-0 text-gray-800">Individual Student Report Card</h1>
-                    <a href="student-report.php" class="btn btn-secondary shadow-sm">
-                        <i class="fas fa-arrow-left me-1"></i> Back to Directory
-                    </a>
+                    <div>
+                        <?php if ($student_info): ?>
+                        <button onclick="window.print()" class="btn btn-dark shadow-sm me-2">
+                            <i class="fas fa-print me-1"></i> Print Report Card
+                        </button>
+                        <?php endif; ?>
+                        <a href="student-report.php" class="btn btn-secondary shadow-sm">
+                            <i class="fas fa-arrow-left me-1"></i> Back to Directory
+                        </a>
+                    </div>
                 </div>
 
                 <?php if ($student_info): ?>
-                
+
+                <!-- Official Print Header -->
+                <div class="print-header">
+                    <h2><i class="fas fa-graduation-cap me-2 text-dark"></i>Muhaddisa School of Science & Technology</h2>
+                    <div class="print-subheader">
+                        <span><?= htmlspecialchars($student_info['full_name']) ?> (ID: <?= htmlspecialchars($student_info['user_id_string']) ?>)</span>
+                        <span class="text-dark">Individual Report Card</span>
+                        <span style="color: #dc3545;">Class <?= htmlspecialchars($student_info['class_name']) . ($student_info['section_name'] ? ' (' . htmlspecialchars($student_info['section_name']) . ')' : '') ?></span>
+                    </div>
+                </div>
+
                 <div class="row mb-4">
                     <div class="col-xl-4 col-md-6">
                         <div class="card shadow h-100 py-2" style="border-left: 4px solid <?= $overall_percentage >= 50 ? '#1cc88a' : '#e74a3b' ?>;">
