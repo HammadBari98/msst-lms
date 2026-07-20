@@ -3,8 +3,14 @@ session_start();
 require_once '../config/db_config.php';
 header('Content-Type: application/json');
 
-$is_teacher = isset($_SESSION['teacher_logged_in']);
-$is_student = isset($_SESSION['student_logged_in']);
+// Login pages across roles (teacher/student/admin) share one PHP session cookie and never
+// clear other roles' session flags on login, so both teacher_logged_in and student_logged_in
+// can end up set at once if someone tested more than one role in the same browser without
+// logging out. The caller must explicitly declare which role it's acting as, so that ambiguous
+// case never gets silently resolved to the wrong one.
+$role = $_GET['role'] ?? '';
+$is_teacher = $role === 'teacher' && isset($_SESSION['teacher_logged_in']);
+$is_student = $role === 'student' && isset($_SESSION['student_logged_in']);
 
 if (!$is_teacher && !$is_student) {
     http_response_code(401);

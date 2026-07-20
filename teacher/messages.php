@@ -150,7 +150,7 @@ $contacts = $stmt_contacts->fetchAll(PDO::FETCH_ASSOC);
             lastMessageId = 0;
             document.getElementById('threadMessages').innerHTML = '<div class="text-center text-muted p-5"><span class="spinner-border spinner-border-sm"></span></div>';
             document.getElementById('threadInputBar').classList.remove('d-none');
-            fetch('../ajax/poll_messages.php?other_id=' + contactId + '&after_id=0')
+            fetch('../ajax/poll_messages.php?role=teacher&other_id=' + contactId + '&after_id=0')
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
@@ -187,7 +187,7 @@ $contacts = $stmt_contacts->fetchAll(PDO::FETCH_ASSOC);
             fetch('../ajax/send_message.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ other_id: activeContactId, body })
+                body: JSON.stringify({ other_id: activeContactId, body, role: 'teacher' })
             })
             .then(res => res.json())
             .then(data => {
@@ -205,7 +205,7 @@ $contacts = $stmt_contacts->fetchAll(PDO::FETCH_ASSOC);
 
         setInterval(function() {
             if (!activeContactId) return;
-            fetch('../ajax/poll_messages.php?other_id=' + activeContactId + '&after_id=' + lastMessageId)
+            fetch('../ajax/poll_messages.php?role=teacher&other_id=' + activeContactId + '&after_id=' + lastMessageId)
                 .then(res => res.json())
                 .then(data => { if (data.success && data.messages.length > 0) renderMessages(data.messages); })
                 .catch(() => { /* silent: next poll will retry */ });
