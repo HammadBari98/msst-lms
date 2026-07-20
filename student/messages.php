@@ -156,7 +156,12 @@ $contacts = $stmt_contacts->fetchAll(PDO::FETCH_ASSOC);
                         } else {
                             renderMessages(data.messages);
                         }
+                    } else {
+                        document.getElementById('threadMessages').innerHTML = '<div class="text-center text-danger p-5">Failed to load messages: ' + escapeHtml(data.message || 'unknown error') + '</div>';
                     }
+                })
+                .catch(err => {
+                    document.getElementById('threadMessages').innerHTML = '<div class="text-center text-danger p-5">Network error loading messages: ' + escapeHtml(err.message) + '</div>';
                 });
         }
 
@@ -190,14 +195,16 @@ $contacts = $stmt_contacts->fetchAll(PDO::FETCH_ASSOC);
                 } else {
                     alert(data.message || 'Failed to send message');
                 }
-            });
+            })
+            .catch(err => alert('Network error sending message: ' + err.message));
         });
 
         setInterval(function() {
             if (!activeContactId) return;
             fetch('../ajax/poll_messages.php?other_id=' + activeContactId + '&after_id=' + lastMessageId)
                 .then(res => res.json())
-                .then(data => { if (data.success && data.messages.length > 0) renderMessages(data.messages); });
+                .then(data => { if (data.success && data.messages.length > 0) renderMessages(data.messages); })
+                .catch(() => { /* silent: next poll will retry */ });
         }, 5000);
 
         const sidebar = document.querySelector('.sidebar');
