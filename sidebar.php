@@ -30,6 +30,7 @@
         <li><a href="timetable-management.php"><i class="fas fa-calendar-alt fa-fw me-2"></i> <span>Timetable Management</span></a></li>
         <li><a href="view-scores.php"><i class="fas fa-chart-line fa-fw me-2"></i> <span>View Scores</span></a></li>
         <li><a href="award-list.php"><i class="fas fa-award fa-fw me-2"></i> <span>Award List</span></a></li>
+        <li><a href="messages.php"><i class="fas fa-comments fa-fw me-2"></i> <span>Messages</span></a></li>
         <li><a href="scholarship-list.php"><i class="fas fa-chart-line fa-fw me-2"></i> <span>Scholarship List</span></a></li>
         <li><a href="student-report.php"><i class="fas fa-chart-line fa-fw me-2"></i> <span>Student Report</span></a></li>
         <li><a href="exam-management.php"><i class="fas fa-pen-alt fa-fw me-2"></i> <span>Exam Management</span></a></li>

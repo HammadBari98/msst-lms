@@ -1,3 +1,18 @@
+<?php
+$__msg_unread = 0;
+if (isset($_SESSION['teacher_logged_in'], $pdo)) {
+    $__stmt_tid = $pdo->prepare("SELECT id FROM users WHERE id = ? OR user_id_string = ? LIMIT 1");
+    $__stmt_tid->execute([$_SESSION['teacher_id'], $_SESSION['teacher_id']]);
+    $__tid = (int)$__stmt_tid->fetchColumn();
+    if ($__tid) {
+        try {
+            $__stmt_unread = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE teacher_id = ? AND sender_role = 'student' AND is_read = 0");
+            $__stmt_unread->execute([$__tid]);
+            $__msg_unread = (int)$__stmt_unread->fetchColumn();
+        } catch (PDOException $e) { /* messages table not created yet */ }
+    }
+}
+?>
  <style>
         :root {
             --primary: #906833;
@@ -194,6 +209,7 @@
     <li><a href="online-classes.php"><i class="fas fa-chart-bar"></i> <span>Online Classes</span></a></li>
     <li><a href="study-materials.php"><i class="fas fa-chart-bar"></i> <span>Study Materials</span></a></li>
     <li><a href="award-list.php"><i class="fas fa-trophy"></i> <span>Award List</span></a></li>
+    <li><a href="messages.php"><i class="fas fa-comments"></i> <span>Messages</span> <?php if ($__msg_unread > 0): ?><span class="badge bg-danger rounded-pill ms-auto"><?= $__msg_unread ?></span><?php endif; ?></a></li>
     <li><a href="notice.php"><i class="fas fa-bullhorn"></i> <span>Notices</span></a></li>
     <li><a href="shared-files.php"><i class="fas fa-share-alt"></i> <span>Shared Files</span></a></li>
     <li><a href="timetable.php"><i class="fas fa-calendar-alt"></i> <span>Timetable</span></a></li>

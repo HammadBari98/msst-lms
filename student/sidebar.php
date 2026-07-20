@@ -1,4 +1,19 @@
- 
+<?php
+$__msg_unread = 0;
+if (isset($_SESSION['student_logged_in'], $pdo)) {
+    $__stmt_sid = $pdo->prepare("SELECT id FROM users WHERE id = ? OR user_id_string = ? LIMIT 1");
+    $__stmt_sid->execute([$_SESSION['student_id'], $_SESSION['student_id']]);
+    $__sid = (int)$__stmt_sid->fetchColumn();
+    if ($__sid) {
+        try {
+            $__stmt_unread = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE student_id = ? AND sender_role = 'teacher' AND is_read = 0");
+            $__stmt_unread->execute([$__sid]);
+            $__msg_unread = (int)$__stmt_unread->fetchColumn();
+        } catch (PDOException $e) { /* messages table not created yet */ }
+    }
+}
+?>
+
  <style>
        :root {
             --primary: #906833;
@@ -200,6 +215,7 @@
     <li><a href="study-materials.php"><i class="fas fa-chart-bar"></i> <span>Study Materials</span></a></li>
 
     <li><a href="my-scores.php"><i class="fas fa-chart-bar"></i> <span>My Scores</span></a></li>
+    <li><a href="messages.php"><i class="fas fa-comments"></i> <span>Messages</span> <?php if ($__msg_unread > 0): ?><span class="badge bg-danger rounded-pill ms-auto"><?= $__msg_unread ?></span><?php endif; ?></a></li>
     <li><a href="attendance.php"><i class="fas fa-calendar-check"></i> <span>Attendance</span></a></li>
 
     <li><a href="online-classes.php"><i class="fas fa-chart-bar"></i> <span>Online Classes</span></a></li>
